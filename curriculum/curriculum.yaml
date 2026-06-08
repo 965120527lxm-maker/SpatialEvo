@@ -1,0 +1,201 @@
+curriculum:
+  title: "从零实现 SpatialEx+：空间转录组学预测系统"
+  description: >
+    通过 10 个渐进式练习，从零重建 SpatialEx+ 的核心能力：
+    从空间坐标构建超图，通过 HGNN/Graph Transformer 聚合邻居信息，
+    将 H&E 图像嵌入映射为基因表达，并在跨 panel 设置下进行循环一致性训练。
+  target_repo: "SpatialEx"
+  estimated_time: "8-12 hours"
+  prerequisites:
+    - "Python 3.10+"
+    - "PyTorch 2.x"
+    - "scipy.sparse 基础"
+    - "了解 MLP 和注意力机制"
+
+  chapters:
+    - level: 1
+      title: "超图构建：从空间坐标到邻接矩阵"
+      concept: "Hypergraph Construction"
+      lines_of_code: 25
+      summary: >
+        给定 N 个细胞的空间坐标，使用 BallTree 找到每个细胞的 k 个最近邻，
+        构建一个 N×N 的 scipy.sparse.csr_matrix 邻接矩阵。
+      tasks:
+        - "实现 build_knn_graph(coords, k=7) → scipy.sparse.csr_matrix"
+        - "确保矩阵对称（双向边）"
+        - "验证矩阵形状为 (N, N)"
+      test: "运行 python test.py 应输出 PASS（shape 和 nnz 检查）"
+      hints:
+        - "使用 sklearn.neighbors.BallTree 或 scipy.spatial.KDTree"
+        - "np.vstack + np.repeat 构造 row/col indices"
+        - "scipy.sparse.csr_matrix((data, (row, col)), shape=(N, N))"
+      depends_on: []
+
+    - level: 2
+      title: "图归一化：GCN 与 HPNN 对称归一化"
+      concept: "Graph Normalization"
+      lines_of_code: 20
+      summary: >
+        对邻接矩阵应用 GCN 归一化（D^-0.5 A D^-0.5）或 HPNN 归一化。
+        这是消息传递能够稳定收敛的关键。
+      tasks:
+        - "实现 normalize_graph(adj, norm_type='gcn') → normalized adj"
+        - "实现 degree 矩阵计算"
+        - "验证归一化后每行/列的和不发散"
+      test: "运行 python test.py 应输出 PASS（行和近似 1 检查）"
+      hints:
+        - "D = np.array(adj.sum(1)).flatten()"
+        - "D_inv_sqrt = sp.diags(np.power(D + 1e-8, -0.5))"
+        - "norm_adj = D_inv_sqrt @ adj @ D_inv_sqrt"
+      depends_on: ["01-hypergraph-construction"]
+
+    - level: 3
+      title: "HGNN 层：超图上的消息传递"
+      concept: "HGNN Layer"
+      lines_of_code: 30
+      summary: >
+        实现单层 Hypergraph Neural Network。
+        核心操作：归一化邻接矩阵 @ 节点特征 @ 权重矩阵 + 激活函数。
+      tasks:
+        - "实现 HGNNLayer(in_dim, out_dim)"
+        - "forward(x, adj_norm) 返回更新后的节点特征"
+        - "使用 torch.sparse.mm 进行稀疏矩阵乘法"
+      test: "运行 python test.py 应输出 PASS（shape 和数值范围检查）"
+      hints:
+        - "self.W = nn.Linear(in_dim, out_dim)"
+        - "out = torch.sparse.mm(adj_norm, self.W(x))"
+        - "return F.leaky_relu(out)"
+      depends_on: ["02-graph-normalization"]
+
+    - level: 4
+      title: "MLP 编码器：H&E 嵌入的维度投影"
+      concept: "MLP Encoder"
+      lines_of_code: 20
+      summary: >
+        将高维 H&E 图像嵌入（如 1024 维）通过 MLP 投影到模型的隐藏维度。
+        这是连接病理图像信息与图神经网络的桥梁。
+      tasks:
+        - "实现 MLPEncoder(in_dim, hidden_dim)"
+        - "forward(x) 返回投影后的特征"
+        - "包含 Linear + LeakyReLU + LayerNorm"
+      test: "运行 python test.py 应输出 PASS（shape 检查）"
+      hints:
+        - "nn.Sequential(Linear, LeakyReLU, LayerNorm)"
+        - "输入 [N, 1024]，输出 [N, hidden_dim]"
+      depends_on: []
+      parallel_to: "03-hgnn-layer"
+
+    - level: 5
+      title: "单 Slice 预测模型：端到端前向传播"
+      concept: "Single-Slice Model"
+      lines_of_code: 40
+      summary: >
+        整合 MLP 编码器、多层 HGNN 和预测头，构建完整的单 slice 预测模型。
+        输入 H&E 嵌入和图，输出基因表达预测。
+      tasks:
+        - "实现 Model(in_dim, hidden_dim, out_dim, num_layers)"
+        - "forward(he, adj) 返回预测表达 [N, out_dim]"
+        - "堆叠 num_layers 个 HGNNLayer"
+      test: "运行 python test.py 应输出 PASS（shape 和 forward 检查）"
+      hints:
+        - "self.encoder = MLPEncoder(in_dim, hidden_dim)"
+        - "self.hgnn = nn.ModuleList([HGNNLayer(...) for _ in range(num_layers)])"
+        - "self.predictor = nn.Linear(hidden_dim, out_dim)"
+      depends_on: ["03-hgnn-layer", "04-mlp-encoder"]
+
+    - level: 6
+      title: "伪 Spot 聚合：从单细胞到 Spot 级别监督"
+      concept: "Pseudo-Spot Aggregation"
+      lines_of_code: 25
+      summary: >
+        实现聚合矩阵机制：模型预测的是单细胞表达，但监督信号在 spot 级别。
+        通过 agg_mtx（spot × cell）将预测聚合后计算 MSE。
+      tasks:
+        - "实现 aggregate_loss(pred, agg_mtx, agg_exp, selection)"
+        - "只聚合 selection 区域内的细胞"
+        - "返回 MSE(agg_mtx @ pred[selection], agg_exp)"
+      test: "运行 python test.py 应输出 PASS（loss 数值检查）"
+      hints:
+        - "pred_selected = pred[selection]  # [S, genes]"
+        - "agg_pred = torch.mm(agg_mtx, pred_selected)  # [spots, genes]"
+        - "loss = F.mse_loss(agg_pred, agg_exp)"
+      depends_on: ["05-single-slice-model"]
+
+    - level: 7
+      title: "回归翻译器：跨 Panel 映射"
+      concept: "Regression Translator"
+      lines_of_code: 20
+      summary: >
+        实现简单的 MLP 翻译器，将 panelA 的预测映射为 panelB 的空间。
+        这是 SpatialEx+ 跨切片整合的核心组件。
+      tasks:
+        - "实现 Translator(in_dim, hidden_dim, out_dim)"
+        - "forward(x) 返回映射后的表达"
+        - "包含 MLP + MSE loss"
+      test: "运行 python test.py 应输出 PASS（shape 检查）"
+      hints:
+        - "两个 Linear 层夹一个激活函数"
+        - "输入 [N, genes_A]，输出 [N, genes_B]"
+      depends_on: ["05-single-slice-model"]
+      parallel_to: "06-pseudo-spot-aggregation"
+
+    - level: 8
+      title: "六 Loss 训练循环：SpatialExP 的完整训练"
+      concept: "Six-Loss Trainer"
+      lines_of_code: 45
+      summary: >
+        实现 SpatialExP 的核心训练循环：6 个 loss 的联合优化。
+        包括直接重建、同 slice 翻译、跨 slice 循环一致性。
+      tasks:
+        - "实现 Trainer.train_step(batch1, batch2)"
+        - "计算 6 个 loss 并求和"
+        - "执行 backward + optimizer.step()"
+      test: "运行 python test.py 应输出 PASS（loss 非 nan 检查）"
+      hints:
+        - "loss1 = model_A(he1, graph1, exp1, ...)"
+        - "pred_A_on_2 = model_A.predict(he2, graph2)"
+        - "loss5 = translator(pred_A_on_2[sel2], exp_B_on_2)"
+      depends_on: ["06-pseudo-spot-aggregation", "07-regression-translator"]
+
+    - level: 9
+      title: "图感知评估：PCC、RMSE 与图 SSIM"
+      concept: "Graph-Aware Evaluation"
+      lines_of_code: 35
+      summary: >
+        实现基因级别的 PCC、RMSE，以及基于图邻域的 Structural Similarity Index。
+        图 SSIM 使用邻接矩阵定义局部统计量。
+      tasks:
+        - "实现 pcc(pred, true) → 每基因 PCC"
+        - "实现 rmse(pred, true) → 每基因 RMSE"
+        - "实现 graph_ssim(pred, true, adj) → 图感知 SSIM"
+      test: "运行 python test.py 应输出 PASS（数值范围检查）"
+      hints:
+        - "PCC: np.corrcoef(rowvar=False)"
+        - "SSIM: ux = adj @ x, vx = adj @ (x*x) - ux*ux"
+      depends_on: ["01-hypergraph-construction"]
+
+    - level: 10
+      title: "Graph Transformer 层：稀疏邻居注意力（进阶）"
+      concept: "Graph Transformer Layer"
+      lines_of_code: 50
+      summary: >
+        实现改进版的核心：稀疏邻居注意力。
+        只对邻接矩阵中的边计算 Q·K，使用 scatter_softmax 和分块计算节省显存。
+        这一层可以替换第 3 课的 HGNNLayer。
+      tasks:
+        - "实现 GraphTransformerLayer(hidden_dim, num_heads)"
+        - "从 sparse adj 提取 edges"
+        - "分块计算 attention scores 和 aggregation"
+        - "forward(x, adj) 返回更新后的节点特征"
+      test: "运行 python test.py 应输出 PASS（shape 和数值范围检查）"
+      hints:
+        - "q = q_proj(x).view(N, H, D)"
+        - "for chunk in edges: attn_scores[chunk] = (q[src] * k[dst]).sum(-1)"
+        - "attn_weights = scatter_softmax(attn_scores, src)"
+      depends_on: ["02-graph-normalization", "03-hgnn-layer"]
+
+  self_check:
+    - "第 1 课不依赖任何其他课，可以独立运行"
+    - "删掉所有 solution.py，学习者仅靠 exercise.md + test.py 可推导出实现"
+    - "第 8 课完成后，功能等价于原仓库 SpatialExP 的核心训练能力"
+    - "整个课程总代码量 ≈ 300 行，远小于原仓库 >3000 行（压缩比 > 10）"
