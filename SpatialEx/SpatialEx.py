@@ -316,7 +316,9 @@ class SpatialExP:
                  loss_fn="mse",
                  num_neighbors=7,
                  graph_kind='spatial',
-                 save_path=None
+                 save_path=None,
+                 translator_hidden_dim=512,
+                 use_dgi=True,
                  ):
         """Initialize the SpatialEx+ trainer with cycle-style regression heads.
 
@@ -362,6 +364,16 @@ class SpatialExP:
             Graph kind label (kept for compatibility).
         save_path : str or None, optional
             If provided, directory to save inference outputs.
+        translator_hidden_dim : int, default 512
+            Hidden dimension of the cross-omics regression translators
+            (:attr:`rm_AB`, :attr:`rm_BA`). Decoupled from panel sizes so
+            small target panels (e.g. 2-protein proteomics) do not collapse
+            the translator capacity.
+        use_dgi : bool, default True
+            Whether to enable the Deep Graph Infomax (DGI) auxiliary loss in
+            :class:`~model.Model_Plus`. Set to False when comparing against
+            :class:`SpatialExP_GT` at the same hidden dimension, because the
+            Graph Transformer baseline does not use DGI.
         """
         self.adata1 = adata1
         self.adata2 = adata2
@@ -383,6 +395,8 @@ class SpatialExP:
         self.save_path = save_path
         self.use_agg = use_agg
         self.platform = platform
+        self.translator_hidden_dim = translator_hidden_dim
+        self.use_dgi = use_dgi
         # 空间参数
         self.num_neighbors = num_neighbors
         self.graph_kind = graph_kind
@@ -403,12 +417,12 @@ class SpatialExP:
         self.out_dim2 = adata2.n_vars
 
         self.module_HA = Model_Plus(in_dim=self.in_dim1, hidden_dim=self.hidden_dim, out_dim=self.out_dim1, num_layers=self.num_layers,
-                                   platform=self.platform).to(self.device)
+                                   platform=self.platform, use_dgi=self.use_dgi).to(self.device)
         self.module_HB = Model_Plus(in_dim=self.in_dim2, hidden_dim=self.hidden_dim, out_dim=self.out_dim2, num_layers=self.num_layers,
-                                   platform=self.platform).to(self.device)
+                                   platform=self.platform, use_dgi=self.use_dgi).to(self.device)
 
-        self.rm_AB = Regression(self.out_dim1, self.out_dim2, self.out_dim2).to(self.device)
-        self.rm_BA = Regression(self.out_dim2, self.out_dim1, self.out_dim1).to(self.device)
+        self.rm_AB = Regression(self.out_dim1, self.translator_hidden_dim, self.out_dim2).to(self.device)
+        self.rm_BA = Regression(self.out_dim2, self.translator_hidden_dim, self.out_dim1).to(self.device)
         self.models = [self.module_HA, self.module_HB, self.rm_AB, self.rm_BA]
         self.optimizer = create_optimizer(optimizer, self.models, self.lr, self.weight_decay)
     
@@ -630,7 +644,8 @@ class SpatialExP_Big:
                  loss_fn="mse",
                  num_neighbors=7,
                  graph_kind='spatial',
-                 save_path=None
+                 save_path=None,
+                 translator_hidden_dim=512,
                  ):
         """Initialize the large-scale SpatialEx+ trainer using pseudo-spots.
 
@@ -676,6 +691,8 @@ class SpatialExP_Big:
             Graph kind label (kept for compatibility).
         save_path : str or None, optional
             Directory to save inference outputs.
+        translator_hidden_dim : int, default 512
+            Hidden dimension of the cross-omics regression translators.
         """
         self.adata1 = adata1
         self.adata2 = adata2
@@ -688,6 +705,7 @@ class SpatialExP_Big:
         self.device = device
         self.weight_decay = weight_decay
         self.use_agg = use_agg
+        self.translator_hidden_dim = translator_hidden_dim
 
         self.batch_size = batch_size
         self.batch_num = batch_num
@@ -727,8 +745,8 @@ class SpatialExP_Big:
 
         self.model_big = Model_Big([graph1, graph2], [self.in_dim1, self.in_dim2], [self.out_dim1, self.out_dim2], num_layers=self.num_layers,
                                    hidden_dim=self.hidden_dim, device=self.device).to(self.device)
-        self.model_AB = Regression(self.out_dim1, int(self.out_dim1/2), self.out_dim2).to(self.device)
-        self.model_BA = Regression(self.out_dim2, int(self.out_dim1/2), self.out_dim1).to(self.device)
+        self.model_AB = Regression(self.out_dim1, self.translator_hidden_dim, self.out_dim2).to(self.device)
+        self.model_BA = Regression(self.out_dim2, self.translator_hidden_dim, self.out_dim1).to(self.device)
         self.models = [self.model_big, self.model_AB, self.model_BA]
         self.optimizer = create_optimizer(optimizer, self.models, self.lr, self.weight_decay)
 
@@ -838,3 +856,54 @@ class SpatialExP_Big:
             print(f'The results have been sucessfully saved in {self.save_path}')
 
         return indirect_panel_B1_list, indirect_panel_A2_list
+
+
+class SpatialExP_Small(SpatialExP):
+    """Capacity-matched small SpatialEx+ trainer for fair comparison with GT.
+
+    This is a thin wrapper around :class:`SpatialExP` that defaults to a
+    reduced hidden dimension (128 instead of 512) and disables the DGI
+    auxiliary loss.  It is intended for controlled comparisons with
+    :class:`~SpatialEx_improved.SpatialExP_GT`, which must use a smaller
+    hidden dimension because the Graph Transformer is more memory-intensive.
+
+    The original SpatialEx+ defaults (``hidden_dim=512``,
+    ``translator_hidden_dim=512``, ``use_dgi=True``) give it roughly four
+    times the backbone capacity of the Graph Transformer run at
+    ``hidden_dim=128``.  Use this wrapper to evaluate architecture differences
+    (HGNN vs. Graph Transformer) at comparable capacity.
+
+    Parameters
+    ----------
+    adata1, adata2 : AnnData
+        Two slices with expression matrices in ``.X`` and histology
+        embeddings in ``.obsm['he']``.
+    graph1, graph2 : scipy.sparse.spmatrix or compatible
+        Spatial graphs for the two slices.
+    hidden_dim : int, default 128
+        Hidden dimension of the HGNN backbone.
+    translator_hidden_dim : int, default 128
+        Hidden dimension of the cross-omics regression translators.
+    use_dgi : bool, default False
+        Disable DGI so the loss landscape is closer to the Graph Transformer
+        baseline (which uses MFP, not DGI).
+    **kwargs
+        Remaining arguments forwarded to :class:`SpatialExP`.
+    """
+
+    def __init__(self,
+                 adata1,
+                 adata2,
+                 graph1,
+                 graph2,
+                 hidden_dim=128,
+                 translator_hidden_dim=128,
+                 use_dgi=False,
+                 **kwargs):
+        super().__init__(
+            adata1, adata2, graph1, graph2,
+            hidden_dim=hidden_dim,
+            translator_hidden_dim=translator_hidden_dim,
+            use_dgi=use_dgi,
+            **kwargs
+        )

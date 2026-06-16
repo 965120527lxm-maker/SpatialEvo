@@ -40,7 +40,8 @@ class SpatialExP_GT:
                  graph_kind='spatial',
                  save_path=None,
                  dropout=0.1,
-                 use_mfp=True):
+                 use_mfp=True,
+                 translator_hidden_dim=None):
         
         self.adata1 = adata1
         self.adata2 = adata2
@@ -64,6 +65,7 @@ class SpatialExP_GT:
         self.graph_kind = graph_kind
         self.dropout = dropout
         self.use_mfp = use_mfp
+        self.translator_hidden_dim = translator_hidden_dim if translator_hidden_dim is not None else hidden_dim
         
         self.slice1_dataloader = pp.Build_dataloader(
             adata1, graph=graph1, graph_norm='hpnn', feat_norm=False,
@@ -108,12 +110,12 @@ class SpatialExP_GT:
         
         # Use Cross-Attention Translator instead of simple MLP regression
         self.rm_AB = CrossAttentionTranslator(
-            self.out_dim1, self.hidden_dim, self.out_dim2,
+            self.out_dim1, self.translator_hidden_dim, self.out_dim2,
             num_heads=max(1, self.num_heads // 2), dropout=self.dropout
         ).to(self.device)
         
         self.rm_BA = CrossAttentionTranslator(
-            self.out_dim2, self.hidden_dim, self.out_dim1,
+            self.out_dim2, self.translator_hidden_dim, self.out_dim1,
             num_heads=max(1, self.num_heads // 2), dropout=self.dropout
         ).to(self.device)
         
@@ -205,3 +207,49 @@ class SpatialExP_GT:
             print(f'The results have been sucessfully saved in {self.save_path}')
         
         return panelB1_indirect, panelA2_indirect
+
+    def inference_direct(self, he, graph, panel):
+        """Directly predict the specified panel with its corresponding backbone.
+
+        Mirrors :meth:`SpatialEx.SpatialExP.inference_direct` so that
+        :class:`SpatialExP_GT` can be used as a drop-in replacement in
+        evaluation scripts.
+        """
+        he = torch.Tensor(he).to(self.device)
+        graph = pp.sparse_mx_to_torch_sparse_tensor(graph).to(self.device)
+        
+        if panel == 'panelA':
+            self.module_HA.eval()
+            omics_direct = self.module_HA.predict(he, graph, grad=False)
+        elif panel == 'panelB':
+            self.module_HB.eval()
+            omics_direct = self.module_HB.predict(he, graph, grad=False)
+        else:
+            raise ValueError(f"panel must be 'panelA' or 'panelB', got {panel}")
+        
+        return omics_direct.detach().cpu().numpy()
+    
+    def inference_indirect(self, he, graph, panel):
+        """Indirectly infer the missing panel using a regression mapper.
+
+        Mirrors :meth:`SpatialEx.SpatialExP.inference_indirect`.
+        """
+        he = torch.Tensor(he).to(self.device)
+        graph = pp.sparse_mx_to_torch_sparse_tensor(graph).to(self.device)
+        
+        if panel == 'panelB':
+            self.module_HA.eval()
+            self.rm_AB.eval()
+            panelA1_direct = self.module_HA.predict(he, graph, grad=False)
+            omics_indirect = self.rm_AB.predict(panelA1_direct)
+            omics_indirect = omics_indirect.detach().cpu().numpy()
+        elif panel == 'panelA':
+            self.module_HB.eval()
+            self.rm_BA.eval()
+            panelB2_direct = self.module_HB.predict(he, graph, grad=False)
+            omics_indirect = self.rm_BA.predict(panelB2_direct)
+            omics_indirect = omics_indirect.detach().cpu().numpy()
+        else:
+            raise ValueError(f"panel must be 'panelA' or 'panelB', got {panel}")
+        
+        return omics_indirect
