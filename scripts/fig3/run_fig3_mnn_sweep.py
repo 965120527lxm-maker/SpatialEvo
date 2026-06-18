@@ -149,6 +149,8 @@ def main():
     Y_B1 = get_X(rep1, panelB).astype(np.float32)
     Y_A2 = get_X(rep2, panelA).astype(np.float32)
     Y_B2 = get_X(rep2, panelB).astype(np.float32)
+    HE1 = np.asarray(rep1.obsm['he'], dtype=np.float32)
+    HE2 = np.asarray(rep2.obsm['he'], dtype=np.float32)
 
     graph1 = se.pp.Build_graph(rep1.obsm['spatial'], graph_type='knn', weighted='gaussian',
                                apply_normalize='row', return_type='coo')
@@ -160,7 +162,7 @@ def main():
 
     for k, mnn_k in configs:
         print(f'\n=== Config k={k}, mnn_k={mnn_k} ===')
-        pseudo_B1 = build_mnn_pseudo(Y_A1, Y_A2, Y_B2, k=k, mnn_k=mnn_k, device=device)
+        pseudo_B1 = build_mnn_pseudo(HE1, HE2, Y_B2, k=k, mnn_k=mnn_k, device=device)
         pseudo_A2 = build_mnn_pseudo(Y_B2, pseudo_B1, Y_A1, k=k, mnn_k=mnn_k, device=device)
 
         direct1 = evaluate(Y_B1, pseudo_B1, graph1)

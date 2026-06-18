@@ -37,22 +37,32 @@ def parse_args():
     parser.add_argument("--rep2", type=str,
                         default="Human_Breast_Cancer_Rep2_uni_resolution64_full.h5ad")
     parser.add_argument("--model", type=str, default="conditional",
-                        choices=["spatialexp", "spatialexp_small", "spatialexp_gt", "conditional", "conditional_mlp"])
+                        choices=["spatialexp", "spatialexp_small", "spatialexp_gt",
+                                 "conditional", "conditional_mlp", "conditional_gt_mnn",
+                                 "conditional_hgnn_mnn", "conditional_mnn_cycle_mlp"])
     parser.add_argument("--panelA_size", type=int, default=150)
     parser.add_argument("--hidden_dim", type=int, default=512)
     parser.add_argument("--translator_hidden_dim", type=int, default=512)
     parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--pseudo_k", type=int, default=5,
-                        help="k for cross-slice H&E nearest neighbor pseudo-labels / matched pairs (conditional only)")
+                        help="k for cross-slice pseudo-label averaging (conditional / MNN)")
+    parser.add_argument("--mnn_k", type=int, default=20,
+                        help="MNN neighbor pool size (conditional_*_mnn only)")
     parser.add_argument("--mlp_mode", type=str, default="measured_pseudo",
                         choices=["he_conditional", "panel_translator", "measured_pseudo"],
                         help="ConditionalMLP variant (conditional_mlp only)")
     parser.add_argument("--mlp_use_he", action="store_true",
                         help="Concatenate H&E to the measured panel input in measured_pseudo mode")
+    parser.add_argument("--lambda_cycle", type=float, default=1.0,
+                        help="Cycle loss weight (conditional_mnn_cycle_mlp only)")
+    parser.add_argument("--lambda_sup", type=float, default=1.0,
+                        help="MNN pseudo-label loss weight (conditional_mnn_cycle_mlp only)")
     parser.add_argument("--num_neighbors", type=int, default=7)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--panel_csv", type=str, default=None,
+                        help="CSV with columns gene,panel (panelA/panelB); overrides random split")
     parser.add_argument("--out_dir", type=str, default=os.path.join(PROJECT_ROOT, "outputs", "conditional", "fig3_panel_split"))
     return parser.parse_args()
 
@@ -109,11 +119,17 @@ def main():
     print(f"Rep1: {rep1_full.shape}, Rep2: {rep2_full.shape}")
 
     # 2. Split panel A/B (same split for both slices)
-    genes = rep1_full.var_names.values
-    np.random.seed(args.seed)
-    np.random.shuffle(genes)
-    panelA_genes = genes[:args.panelA_size].tolist()
-    panelB_genes = genes[args.panelA_size:].tolist()
+    if args.panel_csv and os.path.exists(args.panel_csv):
+        panel_df = pd.read_csv(args.panel_csv)
+        panelA_genes = panel_df[panel_df['panel'] == 'panelA']['gene'].astype(str).tolist()
+        panelB_genes = panel_df[panel_df['panel'] == 'panelB']['gene'].astype(str).tolist()
+        print(f"Loaded panel split from {args.panel_csv}")
+    else:
+        genes = rep1_full.var_names.values
+        np.random.seed(args.seed)
+        np.random.shuffle(genes)
+        panelA_genes = genes[:args.panelA_size].tolist()
+        panelB_genes = genes[args.panelA_size:].tolist()
     print(f"Panel A: {len(panelA_genes)} genes, Panel B: {len(panelB_genes)} genes")
 
     rep1_A, rep1_B = split_panels(rep1_full, panelA_genes, panelB_genes)
@@ -161,16 +177,50 @@ def main():
         kwargs = dict(
             mode=args.mlp_mode,
             pseudo_k=args.pseudo_k,
+            mnn_k=args.mnn_k,
             hidden_dim=args.hidden_dim,
             epochs=args.epochs,
             lr=args.lr,
             device=device,
         )
         if args.mlp_mode == "measured_pseudo":
-            kwargs["measured_A2"] = np.asarray(rep2_A.X.toarray() if hasattr(rep2_A.X, 'toarray') else rep2_A.X)
-            kwargs["measured_B1"] = np.asarray(rep1_B.X.toarray() if hasattr(rep1_B.X, 'toarray') else rep1_B.X)
             kwargs["use_he"] = args.mlp_use_he
         trainer = se.SpatialExP_ConditionalMLP(rep1_A, rep2_B, **kwargs)
+    elif args.model == "conditional_gt_mnn":
+        trainer = se.SpatialExP_ConditionalGT(
+            rep1_A, rep2_B, graph1, graph2,
+            pseudo_k=args.pseudo_k,
+            mnn_k=args.mnn_k,
+            hidden_dim=args.hidden_dim,
+            epochs=args.epochs,
+            lr=args.lr,
+            device=device,
+            use_mfp=False,
+        )
+    elif args.model == "conditional_hgnn_mnn":
+        trainer = se.SpatialExP_ConditionalHGNN(
+            rep1_A, rep2_B, graph1, graph2,
+            pseudo_k=args.pseudo_k,
+            mnn_k=args.mnn_k,
+            hidden_dim=args.hidden_dim,
+            epochs=args.epochs,
+            lr=args.lr,
+            device=device,
+            use_dgi=False,
+        )
+    elif args.model == "conditional_mnn_cycle_mlp":
+        trainer = se.SpatialExP_ConditionalMNNCycleMLP(
+            rep1_A, rep2_B,
+            pseudo_k=args.pseudo_k,
+            mnn_k=args.mnn_k,
+            hidden_dim=args.hidden_dim,
+            lambda_sup=args.lambda_sup,
+            lambda_cycle=args.lambda_cycle,
+            use_he=args.mlp_use_he,
+            epochs=args.epochs,
+            lr=args.lr,
+            device=device,
+        )
     else:
         raise ValueError(f"Unknown model: {args.model}")
 
@@ -181,7 +231,8 @@ def main():
     if args.model in ("spatialexp", "spatialexp_small", "spatialexp_gt"):
         pred_B1 = trainer.inference_indirect(rep1_A.obsm["he"], graph1, panel="panelB")
         pred_A2 = trainer.inference_indirect(rep2_B.obsm["he"], graph2, panel="panelA")
-    else:
+    elif args.model in ("conditional", "conditional_mlp", "conditional_gt_mnn",
+                        "conditional_hgnn_mnn", "conditional_mnn_cycle_mlp"):
         pred_B1 = trainer.predict_panelB_on_slice1(
             rep1_A.obsm["he"], np.asarray(rep1_A.X.toarray() if hasattr(rep1_A.X, 'toarray') else rep1_A.X),
             graph1

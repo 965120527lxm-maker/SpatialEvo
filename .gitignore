@@ -53,3 +53,9 @@ checkpoints/
 *.pt
 *.pth
 *.ckpt
+
+# Third-party / large vendored assets (use external/deeppt/download.sh)
+external/
+
+# Local exports
+kimi-export*.md

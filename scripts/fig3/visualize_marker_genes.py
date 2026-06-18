@@ -81,10 +81,12 @@ def main():
     Y_B1 = mnn.get_X(rep1, panelB).astype(np.float32)
     Y_A2 = mnn.get_X(rep2, panelA).astype(np.float32)
     Y_B2 = mnn.get_X(rep2, panelB).astype(np.float32)
+    HE1 = np.asarray(rep1.obsm['he'], dtype=np.float32)
+    HE2 = np.asarray(rep2.obsm['he'], dtype=np.float32)
 
     # Raw kNN
     print('Training raw kNN MLP...')
-    raw_B1 = mnn.build_raw_pseudo(Y_A1, Y_A2, Y_B2, k=args.k, device=device)
+    raw_B1 = mnn.build_raw_pseudo(HE1, HE2, Y_B2, k=args.k, device=device)
     raw_A2 = mnn.build_raw_pseudo(Y_B2, raw_B1, Y_A1, k=args.k, device=device)
     model_raw1, model_raw2 = mnn.train_panel_mlp(
         Y_A1, raw_B1, Y_B2, raw_A2,
@@ -93,7 +95,7 @@ def main():
 
     # MNN kNN
     print('Training MNN kNN MLP...')
-    mnn_B1 = mnn.build_mnn_pseudo(Y_A1, Y_A2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
+    mnn_B1 = mnn.build_mnn_pseudo(HE1, HE2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
     mnn_A2 = mnn.build_mnn_pseudo(Y_B2, mnn_B1, Y_A1, k=args.k, mnn_k=args.mnn_k, device=device)
     model_mnn1, model_mnn2 = mnn.train_panel_mlp(
         Y_A1, mnn_B1, Y_B2, mnn_A2,

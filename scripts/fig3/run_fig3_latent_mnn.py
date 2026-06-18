@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Shared latent alignment + MNN for measured-panel pseudo-labels.
+Strict Fig.3 latent alignment + MNN for pseudo-labels.
 
-The latent space is used only for cross-slice matching; the MLP still takes
-raw measured panel as input and predicts the missing panel.
+Latent space is used only for cross-slice H&E matching (Slice1 pseudo-B).
+Slice2 pseudo-A always uses B-panel MNN (YB2 ↔ pseudo B1 → YA1).
 
-We compare:
-  1. Raw measured panel MNN (no alignment)
-  2. PCA latent + MNN
-  3. CORAL domain alignment + MNN
+Compares:
+  1. Raw H&E MNN
+  2. PCA latent on H&E + MNN
+  3. CORAL-aligned H&E + MNN
 
-No ground-truth leakage: Slice2 -> Slice1 matching only uses pseudo panel B on Slice1,
-never the true Y_B1.
+Never uses held-out Y_B1 or Y_A2 in training/pseudo-label construction.
 """
 
 import os
@@ -23,8 +22,6 @@ sys.path.insert(0, PROJECT_ROOT)
 import argparse
 import numpy as np
 import pandas as pd
-import scipy.sparse
-import scanpy as sc
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -47,6 +44,8 @@ def parse_args():
     parser.add_argument('--pca_dim', type=int, default=50)
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--panel_csv', type=str, default=None,
+                        help='CSV with columns gene,panel (panelA/panelB); overrides random split')
     parser.add_argument('--out_dir', type=str,
                         default=os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_latent_mnn'))
     return parser.parse_args()
@@ -78,8 +77,7 @@ def coral_alignment(X_src, X_tgt):
         return u @ np.diag(np.sqrt(s)) @ vt
 
     W = mat_sqrt(Ct) @ np.linalg.inv(mat_sqrt(Cs))
-    X_src_aligned = xs @ W.T
-    return X_src_aligned.astype(np.float32)
+    return (xs @ W.T).astype(np.float32)
 
 
 def train_panel_mlps(Y_A1, pseudo_B1, Y_B2, pseudo_A2, hidden_dim, epochs, lr, device):
@@ -114,17 +112,12 @@ def evaluate(gt, pred, graph):
     return float(pcc_reduce), float(ssim_reduce), float(cmd_reduce)
 
 
-def run_pipeline(name, a1, a2, b2, pseudoB1_aligned_to_b2,
-                 Y_A1, Y_B1, Y_A2, Y_B2, graph1, graph2, args, device):
-    """
-    a1/a2: A-space embeddings for Slice1/Slice2 -> build pseudoB1.
-    b2: B-space embedding for Slice2 query -> build pseudoA2.
-    pseudoB1_aligned_to_b2: pseudoB1 aligned into b2 space, used as ref for pseudoA2 matching.
-    """
+def run_pipeline(name, he1, he2, Y_A1, Y_B1, Y_A2, Y_B2, graph1, graph2, args, device):
+    """Strict Fig.3: H&E-space MNN for pseudo-B, B-panel MNN for pseudo-A."""
     print(f'\n=== {name} ===')
 
-    pseudo_B1 = mnn.build_mnn_pseudo(a1, a2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
-    pseudo_A2 = mnn.build_mnn_pseudo(b2, pseudoB1_aligned_to_b2, Y_A1, k=args.k, mnn_k=args.mnn_k, device=device)
+    pseudo_B1 = mnn.build_mnn_pseudo(he1, he2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
+    pseudo_A2 = mnn.build_mnn_pseudo(Y_B2, pseudo_B1, Y_A1, k=args.k, mnn_k=args.mnn_k, device=device)
 
     direct1 = evaluate(Y_B1, pseudo_B1, graph1)
     direct2 = evaluate(Y_A2, pseudo_A2, graph2)
@@ -156,15 +149,25 @@ def main():
     rep1 = mnn.load_slice(args.rep1, args.data_root)
     rep2 = mnn.load_slice(args.rep2, args.data_root)
 
-    genes = rep1.var_names.values
-    np.random.shuffle(genes)
-    panelA = genes[:args.panelA_size].tolist()
-    panelB = genes[args.panelA_size:].tolist()
+    if args.panel_csv and os.path.exists(args.panel_csv):
+        panel_df = pd.read_csv(args.panel_csv)
+        panelA = panel_df[panel_df['panel'] == 'panelA']['gene'].astype(str).tolist()
+        panelB = panel_df[panel_df['panel'] == 'panelB']['gene'].astype(str).tolist()
+        print(f'Loaded panel split from {args.panel_csv}: A={len(panelA)}, B={len(panelB)}')
+    else:
+        genes = rep1.var_names.values
+        np.random.seed(args.seed)
+        np.random.shuffle(genes)
+        panelA = genes[:args.panelA_size].tolist()
+        panelB = genes[args.panelA_size:].tolist()
+        print(f'Using random split seed={args.seed}: A={len(panelA)}, B={len(panelB)}')
 
     Y_A1 = mnn.get_X(rep1, panelA).astype(np.float32)
     Y_B1 = mnn.get_X(rep1, panelB).astype(np.float32)
     Y_A2 = mnn.get_X(rep2, panelA).astype(np.float32)
     Y_B2 = mnn.get_X(rep2, panelB).astype(np.float32)
+    HE1 = np.asarray(rep1.obsm['he'], dtype=np.float32)
+    HE2 = np.asarray(rep2.obsm['he'], dtype=np.float32)
 
     import SpatialEx as se
     graph1 = se.pp.Build_graph(rep1.obsm['spatial'], graph_type='knn', weighted='gaussian',
@@ -174,31 +177,20 @@ def main():
 
     rows = []
 
-    # 1) Raw measured panel
-    pseudo_B1_raw = mnn.build_mnn_pseudo(Y_A1, Y_A2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
-    rows.append(run_pipeline('raw measured panel',
-                             Y_A1, Y_A2, Y_B2, pseudo_B1_raw,
+    rows.append(run_pipeline('strict H&E MNN', HE1, HE2,
                              Y_A1, Y_B1, Y_A2, Y_B2, graph1, graph2, args, device))
 
-    # 2) PCA latent
-    Z_A1, Z_A2 = fit_pca(Y_A1, Y_A2, n_components=args.pca_dim)
-    pseudo_B1_pca = mnn.build_mnn_pseudo(Z_A1, Z_A2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
-    Z_B2, Z_pseudoB1 = fit_pca(Y_B2, pseudo_B1_pca, n_components=args.pca_dim)
-    rows.append(run_pipeline('PCA latent',
-                             Z_A1, Z_A2, Z_B2, Z_pseudoB1,
+    Z_HE1, Z_HE2 = fit_pca(HE1, HE2, n_components=args.pca_dim)
+    rows.append(run_pipeline('PCA H&E latent + MNN', Z_HE1, Z_HE2,
                              Y_A1, Y_B1, Y_A2, Y_B2, graph1, graph2, args, device))
 
-    # 3) CORAL aligned
-    Y_A2_coral_to_A1 = coral_alignment(Y_A2, Y_A1)
-    pseudo_B1_coral = mnn.build_mnn_pseudo(Y_A1, Y_A2_coral_to_A1, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
-    pseudo_B1_coral_to_B2 = coral_alignment(pseudo_B1_coral, Y_B2)
-    rows.append(run_pipeline('CORAL aligned',
-                             Y_A1, Y_A2_coral_to_A1, Y_B2, pseudo_B1_coral_to_B2,
+    HE2_coral = coral_alignment(HE2, HE1)
+    rows.append(run_pipeline('CORAL H&E + MNN', HE1, HE2_coral,
                              Y_A1, Y_B1, Y_A2, Y_B2, graph1, graph2, args, device))
 
     df = pd.DataFrame(rows)
     df.to_csv(os.path.join(args.out_dir, 'latent_mnn_results.csv'), index=False)
-    print('\n=== Latent + MNN results ===')
+    print('\n=== Strict latent + MNN results ===')
     print(df.to_string(index=False))
 
 

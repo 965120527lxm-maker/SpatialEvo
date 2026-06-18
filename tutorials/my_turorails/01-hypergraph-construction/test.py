@@ -6,9 +6,9 @@ import scipy.sparse as sp
 # Import the student's implementation
 # ---------------------------------------------------------------------------
 try:
-    from solution import build_knn_graph  # if they put it here
+    from starter import build_knn_graph  # if they put it here
 except ImportError:
-    from starter import build_knn_graph    # fallback
+    from solution import build_knn_graph    # fallback
 
 
 def test_shape_and_type():

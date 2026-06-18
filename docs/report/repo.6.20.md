@@ -1,0 +1,188 @@
+# Fig.3 架构 × 监督信号排列组合与实验结果
+
+> 数据：Xenium Human Breast Cancer Rep1/Rep2，`data/panel_split_official.csv`（150 panelA / 163 panelB）。  
+> 评估指标：gene-level PCC（Slice1 预测 PanelB，Slice2 预测 PanelA）。  
+> 训练默认 500 epochs（MLP MNN 脚本为 300 epochs），hidden=512（GT 为 128-d）。
+
+---
+
+## 1. 任务协议
+
+### 1.1 Strict Fig.3（当前主 benchmark）
+
+与论文 Fig.3 一致，**不使用 held-out panel**：
+
+| 切片   | 可用           | 仅评估  |
+| ------ | -------------- | ------- |
+| Slice1 | $X_1$, $Y_A^1$ | $Y_B^1$ |
+| Slice2 | $X_2$, $Y_B^2$ | $Y_A^2$ |
+
+Strict MNN 伪标签构造：
+
+- Slice1 pseudo-$B$：**H&E 跨切片 MNN**（$X_1\leftrightarrow X_2$），转移 $Y_B^2$
+- Slice2 pseudo-$A$：**B-panel 跨切片 MNN**（$Y_B^2\leftrightarrow$ pseudo-$Y_B^1$），转移 $Y_A^1$
+
+### 1.2 Oracle MNN（已废弃，仅作对照）
+
+早期实现用 $Y_A^2$ 做 A1↔A2 matching（Slice2 上本不应可见），在 official split 上 PCC 虚高。**后续实验均以 strict 为准。**
+
+---
+
+## 2. 仓库内组合空间
+
+### 2.1 编码器轴
+
+| 名称             | 类 / 脚本                    | 说明                                |
+| ---------------- | ---------------------------- | ----------------------------------- |
+| HGNN             | `SpatialExP`                 | 官方 SpatialEx+，512-d              |
+| HGNN-small       | `SpatialExP_Small`           | 128-d 容量对齐                      |
+| GT               | `SpatialExP_GT`              | Graph Transformer + MFP，128-d 稳定 |
+| HGNN-conditional | `SpatialExP_Conditional`     | HGNN + [H&E, measured panel] 输入   |
+| HGNN-MNN         | `SpatialExP_ConditionalHGNN` | HGNN + strict MNN 伪标签            |
+| GT-MNN           | `SpatialExP_ConditionalGT`   | GT + strict MNN 伪标签              |
+| MLP              | `SpatialExP_ConditionalMLP`  | 2-layer MLP                         |
+
+### 2.2 监督 / 匹配轴
+
+| 名称           | 实现                                | 匹配空间                           | 接入模型        |
+| -------------- | ----------------------------------- | ---------------------------------- | --------------- |
+| Cycle          | `SpatialExP` / `SpatialExP_GT`      | 同切片 A↔B 重建 + 跨切片 cycle     | HGNN / GT       |
+| Cycle-only MLP | `SpatialExP_ConditionalCycleMLP`    | 仅 measured-panel cycle + 分布匹配 | MLP             |
+| H&E kNN        | `SpatialExP_Conditional`            | H&E 跨切片 kNN                     | HGNN            |
+| Strict raw kNN | `run_fig3_mnn_pseudo.py`            | H&E bridge + B-panel bridge        | MLP             |
+| Strict MNN     | `build_strict_mnn_pseudo_labels`    | 同上 + MNN 过滤                    | MLP / HGNN / GT |
+| MNN + Cycle    | `SpatialExP_ConditionalMNNCycleMLP` | strict MNN 监督 + cycle 正则       | MLP             |
+| Latent MNN     | `run_fig3_latent_mnn.py`            | H&E PCA/CORAL + MNN                | MLP             |
+
+---
+
+## 3. Official split 结果总表（gene-level PCC）
+
+### 3.1 Strict 协议（Fig.3 合规）
+
+| 编码器   | 监督                 | Slice1 PCC | Slice2 PCC | 输出目录                                    |
+| -------- | -------------------- | ---------: | ---------: | ------------------------------------------- |
+| HGNN     | Cycle                |      0.275 |      0.301 | `fig3_spatialexp_official`                  |
+| GT-128   | Cycle                |      0.267 |      0.276 | `fig3_spatialexp_gt_official`               |
+| MLP      | Strict raw kNN       |      0.327 |      0.381 | `fig3_mnn_pseudo_strict_official`           |
+| MLP      | **Strict MNN**       |  **0.334** |  **0.371** | `fig3_mnn_pseudo_strict_official`           |
+| MLP      | Strict MNN + Cycle   |      0.315 |      0.353 | `fig3_mnn_cycle_strict_official`            |
+| MLP      | Cycle only（无 MNN） |      0.005 |      0.013 | `fig3_conditional_cycle_strict_official`    |
+| GT-128   | Strict MNN           |      0.258 |      0.289 | `fig3_conditional_gt_mnn_strict_official`   |
+| HGNN-512 | Strict MNN           |      0.234 |      0.273 | `fig3_conditional_hgnn_mnn_strict_official` |
+
+> MLP strict MNN 脚本训练 300 epochs；其余多为 500 epochs。
+
+### 3.2 Oracle MNN（使用了 $Y_A^2$，**不作主结论**）
+
+| 编码器   | 监督       | Slice1 PCC | Slice2 PCC | 输出目录                             |
+| -------- | ---------- | ---------: | ---------: | ------------------------------------ |
+| MLP      | Oracle MNN |      0.441 |      0.480 | `fig3_mnn_pseudo_official`           |
+| GT-128   | Oracle MNN |      0.319 |      0.348 | `fig3_conditional_gt_mnn_official`   |
+| HGNN-512 | Oracle MNN |      0.303 |      0.329 | `fig3_conditional_hgnn_mnn_official` |
+
+### 3.3 Random split（机制诊断，非论文 split）
+
+| 编码器 | 监督       | Slice1 PCC | Slice2 PCC |
+| ------ | ---------- | ---------: | ---------: |
+| HGNN   | Cycle      |         ~0 |         ~0 |
+| MLP    | Oracle MNN |     ~0.015 |     ~0.265 |
+| MLP    | Cycle only |         ~0 |         ~0 |
+
+Random split 下 Slice1 信息桥极弱；official split 两方向均可解。
+
+---
+
+## 4. 排列组合解读
+
+### 4.1 监督信号：MNN ≫ Cycle（strict 设定下）
+
+```
+Cycle only (MLP)     : 0.005 / 0.013   ← 接近随机，cycle self-consistency trap
+HGNN/GT + Cycle      : 0.27  / 0.30    ← 论文方法线，无伪标签
+MLP + Strict MNN     : 0.334 / 0.371   ← 当前 strict 最优
+MLP + MNN + Cycle    : 0.315 / 0.353   ← 加 cycle 略降，与 MNN 冲突
+```
+
+**结论**：在 strict Fig.3 下，跨切片伪标签是主要有效监督；纯 cycle 无法恢复 missing panel，与 MNN 叠加亦无增益。
+
+### 4.2 编码器：同监督下 MLP > GT > HGNN（strict MNN）
+
+| 监督       | MLP               | GT-128        | HGNN-512      |
+| ---------- | ----------------- | ------------- | ------------- |
+| Strict MNN | **0.334 / 0.371** | 0.258 / 0.289 | 0.234 / 0.273 |
+| Cycle      | — / —             | 0.267 / 0.276 | 0.275 / 0.301 |
+
+Graph 模型 + MNN 未超过纯 MLP；HGNN conditional 的 SSIM 明显偏低（~0.05），空间结构保真差。
+
+### 4.3 Oracle vs Strict：信息预算影响
+
+Official split 上，去掉 $Y_A^2$ oracle 对齐后，MLP PCC 从 ~0.44/0.48 降至 ~0.33/0.37（约 −0.10），仍高于 Cycle baseline。
+
+---
+
+## 5. 与论文 DeepPT baseline 的关系
+
+论文 Fig.3 对比对象是 **DeepPT**（H&E→omics，每 panel 独立训练），本仓库**尚未实现 DeepPT**。上表结果为内部对照：
+
+- **SpatialEx+ Cycle**（HGNN/GT）≈ 论文方法线
+- **MLP + Strict MNN** = 本仓库探索的轻量替代路线，不能直接与论文 DeepPT 数值比较
+
+---
+
+## 6. 推荐实验矩阵（后续优化）
+
+在 **strict Fig.3 + official split** 约束下，优先扩展：
+
+| 优先级 | 方向                                              | 理由                            |
+| ------ | ------------------------------------------------- | ------------------------------- |
+| 高     | MLP + Strict MNN 调参（$k$, $mnn\_k$, $\lambda$） | 当前 strict 最优                |
+| 高     | GT/HGNN + Cycle（已有 baseline）                  | 论文方法线，架构差异明确        |
+| 中     | GT + Strict MNN                                   | graph 模型 + 伪标签，略低于 MLP |
+| 低     | MNN + Cycle                                       | 已证略有害                      |
+| 低     | Cycle only                                        | 已证无效                        |
+
+---
+
+## 7. 运行命令速查
+
+```bash
+# Strict MNN + MLP
+conda run -n spatialex python scripts/fig3/run_fig3_mnn_pseudo.py \
+  --panel_csv data/panel_split_official.csv \
+  --out_dir outputs/conditional/fig3_mnn_pseudo_strict_official
+
+# HGNN / GT + Cycle
+conda run -n spatialex python scripts/fig3/run_fig3_panel_split.py \
+  --model spatialexp --panel_csv data/panel_split_official.csv \
+  --out_dir outputs/conditional/fig3_spatialexp_official
+
+# GT / HGNN + Strict MNN
+conda run -n spatialex python scripts/fig3/run_fig3_panel_split.py \
+  --model conditional_gt_mnn --hidden_dim 128 \
+  --panel_csv data/panel_split_official.csv \
+  --out_dir outputs/conditional/fig3_conditional_gt_mnn_strict_official
+
+# MLP + Strict MNN + Cycle
+conda run -n spatialex python scripts/fig3/run_fig3_panel_split.py \
+  --model conditional_mnn_cycle_mlp \
+  --panel_csv data/panel_split_official.csv \
+  --out_dir outputs/conditional/fig3_mnn_cycle_strict_official
+
+# MLP + Cycle only（无 MNN）
+conda run -n spatialex python scripts/fig3/run_fig3_conditional_cycle.py \
+  --panel_csv data/panel_split_official.csv --no_use_he \
+  --out_dir outputs/conditional/fig3_conditional_cycle_strict_official
+```
+
+---
+
+## 8. 代码入口
+
+| 组合              | 核心文件                                                                   |
+| ----------------- | -------------------------------------------------------------------------- |
+| Strict MNN 伪标签 | `SpatialEx/SpatialEx_conditional_gt.py` → `build_strict_mnn_pseudo_labels` |
+| HGNN/GT + MNN     | `SpatialEx_conditional_hgnn.py`, `SpatialEx_conditional_gt.py`             |
+| MLP + MNN + Cycle | `SpatialEx_conditional_mnn_cycle_mlp.py`                                   |
+| MLP + Cycle only  | `SpatialEx_conditional_cycle_mlp.py`                                       |
+| 统一入口          | `scripts/fig3/run_fig3_panel_split.py`                                     |

@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Fig. 3 panel diagonal integration with MNN-filtered measured-panel pseudo-labels.
+Fig. 3 panel diagonal integration with strict MNN-filtered pseudo-labels.
+
+Strict Fig.3 protocol: Slice1 (H&E + panel A), Slice2 (H&E + panel B).
+Held-out Y_B1 and Y_A2 are never used in pseudo-label construction.
 
 Compares:
-  1. Raw cosine kNN pseudo-labels (baseline).
-  2. Mutual-nearest-neighbor (MNN) filtered pseudo-labels.
-
-For each, reports:
-  - pseudo-label ceiling (direct evaluation vs held-out truth)
-  - learned panel-to-panel MLP performance (trained on pseudo-labels)
+  1. Raw cosine kNN pseudo-labels (H&E bridge + B-panel bridge).
+  2. Mutual-nearest-neighbor (MNN) filtered pseudo-labels (same bridges).
 """
 
 import os
@@ -61,6 +60,8 @@ def parse_args():
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--panel_csv', type=str, default=None,
+                        help='CSV with columns gene,panel (panelA/panelB); overrides random split')
     parser.add_argument('--out_dir', type=str,
                         default=os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_mnn_pseudo'))
     return parser.parse_args()
@@ -175,28 +176,38 @@ def main():
     rep1 = load_slice(args.rep1, args.data_root)
     rep2 = load_slice(args.rep2, args.data_root)
 
-    genes = rep1.var_names.values
-    np.random.shuffle(genes)
-    panelA = genes[:args.panelA_size].tolist()
-    panelB = genes[args.panelA_size:].tolist()
+    if args.panel_csv and os.path.exists(args.panel_csv):
+        panel_df = pd.read_csv(args.panel_csv)
+        panelA = panel_df[panel_df['panel'] == 'panelA']['gene'].astype(str).tolist()
+        panelB = panel_df[panel_df['panel'] == 'panelB']['gene'].astype(str).tolist()
+        print(f'Loaded panel split from {args.panel_csv}: A={len(panelA)}, B={len(panelB)}')
+    else:
+        genes = rep1.var_names.values
+        np.random.seed(args.seed)
+        np.random.shuffle(genes)
+        panelA = genes[:args.panelA_size].tolist()
+        panelB = genes[args.panelA_size:].tolist()
+        print(f'Using random split seed={args.seed}: A={len(panelA)}, B={len(panelB)}')
 
     Y_A1 = get_X(rep1, panelA).astype(np.float32)
     Y_B1 = get_X(rep1, panelB).astype(np.float32)
     Y_A2 = get_X(rep2, panelA).astype(np.float32)
     Y_B2 = get_X(rep2, panelB).astype(np.float32)
+    HE1 = np.asarray(rep1.obsm['he'], dtype=np.float32)
+    HE2 = np.asarray(rep2.obsm['he'], dtype=np.float32)
 
     graph1 = se.pp.Build_graph(rep1.obsm['spatial'], graph_type='knn', weighted='gaussian',
                                apply_normalize='row', return_type='coo')
     graph2 = se.pp.Build_graph(rep2.obsm['spatial'], graph_type='knn', weighted='gaussian',
                                apply_normalize='row', return_type='coo')
 
-    # Build pseudo labels
-    print('=== Raw cosine kNN pseudo labels ===')
-    pseudo_B1_raw = build_raw_pseudo(Y_A1, Y_A2, Y_B2, k=args.k, device=device)
+    # Build pseudo labels (strict: H&E bridge for Slice1, B-panel bridge for Slice2)
+    print('=== Raw cosine kNN pseudo labels (strict Fig.3) ===')
+    pseudo_B1_raw = build_raw_pseudo(HE1, HE2, Y_B2, k=args.k, device=device)
     pseudo_A2_raw = build_raw_pseudo(Y_B2, pseudo_B1_raw, Y_A1, k=args.k, device=device)
 
-    print('\n=== MNN-filtered pseudo labels ===')
-    pseudo_B1_mnn = build_mnn_pseudo(Y_A1, Y_A2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
+    print('\n=== Strict MNN-filtered pseudo labels ===')
+    pseudo_B1_mnn = build_mnn_pseudo(HE1, HE2, Y_B2, k=args.k, mnn_k=args.mnn_k, device=device)
     pseudo_A2_mnn = build_mnn_pseudo(Y_B2, pseudo_B1_mnn, Y_A1, k=args.k, mnn_k=args.mnn_k, device=device)
 
     # Pseudo-label ceilings

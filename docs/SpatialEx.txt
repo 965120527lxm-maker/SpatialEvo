@@ -1,0 +1,3636 @@
+nature methods
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+High-parameter spatial multi-omics through
+histology-anchored integration
+Received: 3 March 2025
+Accepted: 21 October 2025
+
+Yonghao Liu1,9, Chuyao Wang 1,9, Zhikang Wang 2,3,4,9, Liang Chen 5, Zhi Li6,
+Jiangning Song 4, Qi Zou 2,3,7, Rui Gao7, Bin-Zhi Qian 8, Xiaoyue Feng 1 ,
+Renchu Guan 1 & Zhiyuan Yuan 2,3
+
+Published online: 17 December 2025
+Check for updates
+
+Spatial omics face challenges in achieving high-parameter, multi-omics
+coprofiling. Serial-section profiling of complementary panels mitigates
+technical trade-offs but introduces the spatial diagonal integration problem.
+To address this, here we present SpatialEx and its extension SpatialEx+,
+computational frameworks leveraging histology as a universal anchor to
+integrate spatial molecular data across tissue sections. SpatialEx combines
+a pretrained hematoxylin and eosin foundation model with hypergraph and
+contrastive learning to predict single-cell omics from histology, encoding
+multi-neighborhood spatial dependencies and global tissue context.
+SpatialEx+ further introduces an omics cycle module that encourages
+cross-omics consistency via slice-invariant mappings, enabling seamless
+integration without comeasured training data. Extensive validations show
+superior hematoxylin and eosin-to-omics prediction, panel diagonal
+integration and omics diagonal integration across various biological
+scenarios. The frameworks scale to datasets exceeding 1 million cells,
+maintain robustness with nonoverlapping or heterogeneous sections and
+support unlimited omics layers in principle. Our work makes multimodal
+spatial profiling broadly accessible.
+
+The functionality of biological systems is intrinsically linked to the
+spatial organization of their cells1. Recent advances in spatial omics
+now enable high-resolution, in situ profiling of gene expression, epigenomic features and proteomic distributions2–4. These technologies
+have revolutionized our capacity to map molecular architectures, offering valuable insights into tissue development5,6, disease progression7,8
+and the cellular interactions9,10.
+Although substantial progress has been made, biological complexity requires a multi-layered analysis that goes beyond single-omics
+measurements11. Efforts to profile multiple omics layers from a single tissue slice—using technologies such as deterministic barcoding
+in tissue for spatial omics sequencing12, spatial-co-indexing of transcriptomes and epitopes sequencing13, spatial multimodal analysis14,
+spatial assay for transposase-accessible chromatin using sequencing15
+and spatial-Mux-seq16—face inherent trade-offs, including limited
+resolution, low throughput and technical challenges due to complex
+processing17,18. An alternative approach—profiling distinct single-omics
+A full list of affiliations appears at the end of the paper.
+
+layers (for example, transcriptomics or metabolomics) on different
+slices and then aligning them computationally—avoids some pitfalls,
+but inevitably creates mismatches at cellular level, compromising
+integration accuracy and downstream analysis19–21.
+Even within a single spatial omics modality, high-parameter
+profiling remains challenging3,22,23. High-resolution spatially resolved
+transcriptomics (SRT) techniques, such as MERFISH 24 and 10x
+Xenium25, achieve single-cell resolution but are limited by predefined gene panels, which cover only a fraction of the whole transcriptome. This limitation hinders the detection of subtle cell states and
+restricts the potential for hypothesis-free discovery26–28. Although
+computational imputation methods using single-cell RNA sequencing data have been proposed, they often overlook spatial context and
+therefore fail to capture local gene expression gradients29. Moreover,
+expanding coverage by profiling different slices with complementary
+gene panels brings back alignment issues similar to those seen in
+multi-omics workflows.
+
+e-mail: fengxy@jlu.edu.cn; guanrenchu@jlu.edu.cn; zhiyuan@fudan.edu.cn
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+373
+
+Article
+To address these limitations, we used an experimentalcomputational framework that leverages serial tissue slices analyzed
+with distinct single-omics techniques. By pairing routine spatial single-omics assays with histology images, our goal is to reconstruct
+high-parameter multi-omics profiles without the need for simultaneous experimental coprofiling. However, integrating disparate omics
+layers across nonoverlapping slices remains a crucial challenge, similar
+to the diagonal integration issues encountered in single-cell genomics
+where datasets lack shared omics features30,31. In contrast to single-cell
+data, spatial omics includes additional layers of spatial context and
+cellular morphology that correlate with molecular profiles32–34. Building on these inherent correlations, we introduce a computational
+framework for spatial diagonal integration, using histology as a feasible but effective anchor to align complementary omics features from
+adjacent slides.
+We introduce SpatialEx and SpatialEx+. SpatialEx is built on a
+hematoxylin and eosin (H&E) foundation model, hypergraph learning
+and a contrastive learning strategy, and it is designed to predict omics
+profiles directly from H&E images regardless of the spatial resolution of
+technologies (for example, single cell or spot). Building on SpatialEx,
+SpatialEx+ addresses the spatially resolved diagonal integration problem by connecting multiple SpatialEx models trained on adjacent slices
+via our newly introduced omics cycle module, which further regularizes
+the relationships across different omics and gene panels across slices.
+Comprehensive benchmarking analyses demonstrate the superior
+performance of our proposed methods in a variety of tasks. These
+include predicting single-cell omics profiles from H&E images (that
+is, H&E-to-omics prediction), using diagonal integration to expand
+high-parameter gene panels (that is, panel diagonal integration) and
+using diagonal integration to achieve spatial multi-omics (that is, omics
+diagonal integration). SpatialEx outperformed existing methods in
+H&E-to-omics prediction, successfully enabling the characterization of tumor microenvironments outside the sequencing area. In
+panel diagonal integration, SpatialEx+ successfully aligned spatial
+domains between two breast cancer slices that underwent SRT with
+nonoverlapping gene panels. Furthermore, the integrated large gene
+panel achieved through diagonal integration revealed previously indistinguishable distinctions between immune and stromal regions. We
+evaluated SpatialEx+’s omics diagonal integration capabilities using
+two distinct cases: spatial transcriptomic–protein profiling and spatial
+metabolic–transcriptomic profiling. Notably, in the Parkinson’s disease
+study, the SpatialEx+ generated coprofiling revealed both anatomic
+and fine-grained pathological domains that were overlooked by spatial single omics alone. To further validate our approach, we tested
+SpatialEx+’s scalability using datasets containing over one million
+cells and challenging cases that violate the adjacent slices requirement (including slices with substantial differences and no overlapping
+regions). In principle, SpatialEx+ enables the simultaneous generation of comprehensive high-parameter spatial multi-omics without
+limitation on the number of omics layers. Most importantly, SpatialEx+
+achieves these capabilities while requiring only spatial single-omics
+assays paired with histology, thereby eliminating the need for complex
+paired multi-omics data collection.
+
+Results
+
+The spatial diagonal integration problem
+In single-cell genomics, data integration strategies are traditionally
+categorized into four types: vertical, horizontal, mosaic and diagonal
+integration30. Among these, diagonal integration presents the most
+remarkable challenges due to the absence of overlapping omics features between datasets35. Current approaches to diagonal integration
+rely on weak biological links, such as correlating the single-cell assay
+for transposase-accessible chromatin with sequencing data with gene
+expression through chromatin accessibility patterns around genes,
+or connecting genes and proteins through protein-coding gene
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+relationships31,36,37. While the spatial omics field has made substantial
+progress in addressing vertical38,39, horizontal40,41 and mosaic integration42 challenges, the problem of spatial diagonal integration—specifically, how to integrate tissue slices profiled with different single-omics
+measurements to generate comprehensive multi-omics profiles for
+each cell—remains largely unresolved.
+Recent work has expanded the concept of diagonal integration
+to include the integration of datasets with the same omics type but
+nonoverlapping features35. Building on this framework, we define two
+scenarios in spatial diagonal integration: panel diagonal integration
+and omics diagonal integration. Panel diagonal integration focuses
+on integrating data across different slices analyzed with the same
+omics technology but different feature panels, while omics diagonal
+integration addresses the integration of different omics types across
+different slices. These integration approaches respectively address the
+challenges of achieving high-parameter (that is, large panel) spatial
+profiling and spatial multi-omics profiling.
+In the approach to spatial diagonal integration, one can leverage
+histology images as an anchoring mechanism to bridge different tissue slices. Consider a series of tissue sections, each analyzed with a
+distinct omics technique paired with H&E image: a far more practical
+approach than simultaneous spatial multi-omics coprofiling. As discussed in a recent comment by M. Li’s laboratory43, one might initially
+consider developing individual H&E-to-omics prediction models for
+each slice, then applying these trained models across slices to predict
+missing omics data. This consideration led us to develop a technology-agnostic H&E-to-omics prediction model that incorporates both
+histology and spatial information (SpatialEx’s motivation). However,
+this straightforward approach proves suboptimal, as histological
+and spatial information alone may not provide sufficient context for
+accurate omics profile prediction indicated by recent studies34,44. This
+limitation motivated us to develop additional regularization modules
+that enable collaborative training among omics-specific H&E-to-omics
+models, thereby enhancing prediction accuracy using omics–omics
+relationships (SpatialEx+’s motivation).
+
+Overview of SpatialEx and SpatialEx+
+Building on our histology-anchored spatial diagonal integration
+framework, we first developed SpatialEx, a technology-agnostic
+H&E-to-omics prediction model. SpatialEx establishes a robust mapping between H&E images and omics expression profiles, enabling
+precise prediction of omics expression values from histological data
+(Fig. 1a–d). The model processes input H&E images through cell segmentation45 and cropping to generate single-cell morphology images,
+which are then transformed into high-dimensional feature representations using a pretrained H&E foundation model46 (Fig. 1b).
+While existing approaches typically use traditional graph
+structures based on cell–cell adjacency to capture pairwise
+relationships47–49, a few studies suggested that such approaches represent the complexity of biological tissues in a suboptimal manner50,51.
+To address this limitation, we implemented a hypergraph structure
+that models group-level correlations through hyperedges (Fig. 1c),
+motivated by established principles in spatial biology, that is, cellular
+microenvironments require collective interactions among cell groups
+to regulate omics states52.
+To further strengthen the model’s capabilities, we incorporated
+contrastive learning to integrate globally relevant data across the entire
+tissue (Fig. 1d). This approach involves generating a corrupted hypergraph H′ by shuffling cell embeddings while maintaining the topological structure. The contrastive learning mechanism ensures that cells
+in the original hypergraph are drawn closer to the summary node S
+while pushing cells in the corrupted hypergraph farther away, thereby
+effectively capturing both cell expression patterns and their surrounding microenvironments. During testing, while the contrastive learning
+component is omitted, all other procedures remain operational.
+374
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+a
+
+Input
+
+Computation process
+
+H&E image
+
+Output
+
+Cell embeddings Position
+
+y
+x
+
+Gene
+protein
+or
+metabolite
+
+H&E image
+
+SpatialEx
+y
+
+b
+
+Features
+
+H&E foundation model
+
+x
+
+c
+
+Cell segmentation and cropping
+
+(x, y)
+
+Hypergraph encoder
+
+d
+
+Hypergraph construction
+
+• Translate histology
+to omics at single-cell
+resolution
+
+y
+
+Decoder
+
+x
+
+Spatial omics
+
+Contrastive learning
+Summary node
+Raw hypergraph
+
+Corrupted hypergraph
+s
+
+H
+
+...
+
+Hyperedge 1
+Pull
+Push
+
+Original
+H&E image
+
+e
+
+Single-cell
+Zoomed-in image
+with cell segmentation images
+
+f
+
+Data preparation
+Spatial omics 1
+
+Hyperedge N
+
+Hypergraph
+
+Input
+
+H&E image
+
+Omics 2
+y
+
+x
+
+Spatial assay
+
+H&E imaging
+
+H&E
+
+Spatial assay
+
+H&E imaging
+
+x
+
+ics cycle 2
+Om
+x
+
+SpatialEx 2
+
+Slice 1
+
+x
+
+H&E
+
+y
+x
+
+Omics 2
+
+y
+x
+
+Measured omics 2
+
+Omics 1
+
+Om
+1
+ics cycle
+
+Omics 2
+x
+
+y
+x
+
+y
+
+H&E
+
+x
+x
+
+H&E image
+
+Gene
+
+Metabolite
+
+Gene
+
+Protein
+
+y
+x
+
+Omics cycle 1
+
+...
+
+...
+
+x
+
+Omics 1
+
+Omics cycle 2
+
+Omics 1
+
+MLP
+
+Omics 2
+
+Cells
+
+Omics 2
+Gene panel 2
+
+SpatialEx 1
+
+Cells
+
+Omics 1
+Gene panel 1
+
+Slice 2
+
+H&E
+
+y
+
+y
+
+y
+
+x
+
+Spatial omics 2
+
+Cells
+
+Slice 2
+
+y
+
+Cells
+
+• Spatial multi-omics
+generation from
+serially profiled
+single-omics sections
+
+Output
+Omics 1
+
+y
+
+y
+
+• Large-panel spatial
+omics generation
+through serially
+profiled small-panel
+sections
+
+Shuffled cell embedding H’:
+{H1 ’, H2 ’, …, HN’}
+
+s
+
+Computation process
+
+y
+
+x
+
+Tissue sampling
+
+s
+H
+
+Measured omics 1
+
+y
+
+• Diagonal integration
+of complementary
+spatial omics via
+histology-anchored
+sections
+
+H
+
+cl
+
+Cell embedding H:
+{H1 , H 2 , …, HN}
+
+Slice 1
+
+SpatialEx+
+
+Spatial context
+
+Omics 2
+
+Omics 1
+
+MLP
+
+g
+H&E-to-omics prediction
+
+Panel diagonal integration
+
+Omics diagonal integration
+Large panel
+
+y
+
++
+
+H&E image
+
+x
+
++
+
+x
+x
+y
+x
+
+Large panel
+
+SpatialEx+
+
+Spatial omics
+
+y
+x
+y
+x
+y
+x
+
+H&E
+
+y
+
+x
+
++
+
+SpatialEx
+
+y
+
++
+
+x
+y
+
+Imaging
+
+Imaging
+
+Multi-omics
+
+H&E
+
+y
+
+H&E
+
+Multi-omics
+
+Imaging
+
++
+
+SpatialEx+
+
+y
+x
+
+H&E
+
+y
+x
+y
+x
+
+Fig. 1 | Overall architecture of SpatialEx and SpatialEx+. a, SpatialEx first crops
+image patch for each cell, which is fed into an H&E foundation model to generate
+low-dimensional embeddings. A cellular hypergraph is then constructed based
+on spatial locations, and a hypergraph encoder is applied to refine cellular
+features through contrastive learning. Finally, the features are decoded to
+predict omics profiles. b, The single-cell images are square patches centered
+on cell locations. When the cell locations are unavailable, cell segmentation is
+performed first. c, In the hypergraph, cells serve as nodes, and each cell with
+its spatial neighborhood forms a hyperedge. d, A corrupted hypergraph with
+
+feature H′ is generated by shuffling the cell embeddings H, while preserving
+the topology in the raw hypergraph. Contrastive learning then minimizes the
+discrepancy between H and the summary node S, and vice versa for the corrupted
+cell embeddings H′ and S. e, Data preparation for SpatialEx+: two slices with
+H&E images, each measuring different spatial omics. f, Building on SpatialEx,
+SpatialEx+ introduces omics cycle modules to enable diagonal integration
+and complement the missing omics profiles in each tissue slice. g, Three key
+applications of this study include: (1) H&E-to-omics prediction, (2) panel diagonal
+integration and (3) omics diagonal integration.
+
+Building on SpatialEx, we developed SpatialEx+ to enable diagonal integration of spatial omics data from adjacent tissue slices (Fig.
+1e,f). The framework begins with data preparation (Fig. 1e), where
+spatial assay and H&E staining are performed on adjacent slices of a
+tissue sample, generating both spatial omics data and H&E images for
+various molecular modalities including genes, metabolites or proteins.
+SpatialEx+ implements a collaborative training framework that enables
+mutual guidance between predictive branches of different omics types.
+When processing H&E images from adjacent tissue slices, the framework simultaneously generates distinct omics data for both slices.
+
+Central to SpatialEx+ is the omics cycle module, which uses a nonlinear
+transformation to establish explicit omics–omics associations. This
+module encourages conservation of cross-omics mapping functions
+between adjacent tissue sections: the relationship f (for example, gene
+expression → protein) remains identical between slices, even when
+omics 1 is measured or predicted in slice 1 and omics 2 is predicted or
+measured in slice 2. By constraining f to align across neighboring sections—where spatial continuity ensures biological similarity—the model
+avoids conflicting slice-specific predictions, harmonizing multi-omics
+inferences under unified tissue-wide principles.
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+375
+
+Article
+We validated our framework across three experimental scenarios
+(Fig. 1g): (1) H&E-to-omics prediction, where SpatialEx translates histology to omics at single-cell resolution; (2) panel diagonal integration,
+where SpatialEx+ generates large-panel SRT data containing both gene
+panels from adjacent slices and (3) omics diagonal integration, where
+SpatialEx+ generates spatial multi-omics data containing both omics
+from adjacent slices. Detailed procedures can be found in Extended
+Data Fig. 1, Supplementary Text 1 and Supplementary Fig. 1.
+
+SpatialEx translates histology to omics at single-cell resolution
+Current H&E-to-omics prediction methods are mostly limited to
+spot-level resolution32,53–55, leaving a critical gap in single-cell resolution prediction. While DeepPT55 represents the most recent advance and
+state-of-the-art in this field based on a recent benchmarking study34, it
+was originally designed for spot-resolution prediction. We modified
+DeepPT’s implementation to enable single-cell predictions, creating
+the first baseline for comparison at this resolution. In addition, we also
+introduced a convolutional neural-network (CNN)-based regression
+model (CNN_Reg) for comparison. CNN_Reg uses ImageNet-pretrained
+ResNet50 to extract image representations, followed by a multilayer
+perceptron (MLP) to learn the mapping from H&E features to gene
+expression. Then, we adapted Hist2ST53 and THItoGene56 for single-cell
+data by using a mini-batch training strategy. In contrast, SpatialEx was
+designed as a resolution-agnostic framework, capable of accurate predictions at both spot and single-cell levels without modification. Using
+formalin-fixed paraffin-embedded sections from a 10x Xenium Human
+Breast Cancer dataset25, along with one normal tissue (human colon),
+one diseased tissue (human skin) and one mouse tissue (mouse colon),
+we evaluated SpatialEx’s single-cell prediction capability through a
+train–test framework (Fig. 2a,b). Both training (slice 1) and test (slice 2)
+sections underwent Xenium sequencing for spatially resolved gene
+expression profiling and H&E staining for histology.
+Two metrics, including Pearson correlation coefficient (PCC) and
+structural similarity index measure (SSIM), are used for quantitative performance evaluation, with higher PCC and SSIM values indicating better
+performance. Figure 2c illustrates the quantitative comparison between
+SpatialEx and DeepPT in terms of prediction evaluation and downstream
+cell-type classification, while Extended Data Fig. 2 shows the comparison
+of SpatialEx against CNN_Reg and DeepPT in terms of prediction evaluation across multiple tissue datasets. In the scatter plots for PCC and SSIM
+(Fig. 2c), each dot represents an individual gene. Notably, compared to the
+two baseline models, the proposed SpatialEx demonstrates substantially
+improved performance in predicting the gene expression. A more comprehensive quantitative and qualitative comparison across all baseline
+methods is presented in Extended Data Fig. 3.
+In Fig. 2d, we visualized the gene expressions of EPCAM, ESR1 and
+PGR predicted by SpatialEx and measured by spatial assays (more visualizations of genes can be found in Extended Data Fig. 4). Notably, ESR1
+and PGR are genes encoding biomarkers for breast cancer prognosis25,33.
+Based on the comparison, SpatialEx demonstrates a notably better
+prediction capability. The results from DeepPT’s exhibit either underexpressions or overexpressions, deviating from the real patterns. Moreover, SpatialEx not only effectively predicts the sequenced regions
+within the red box, with its predicted gene expression closely matching
+Fig. 2 | SpatialEx translates histology to omics at single-cell resolution.
+a, Experimental process: serial human breast cancer tissues were imaged, with
+in situ sequencing only performed on slice 1. b, Computational schematic:
+SpatialEx links H&E features with single-cell omics within the sequencing area
+of slice 1, then infers single-cell omics profiles across the whole-slide images
+of both slices. c, Top, from left to right: scatter plots of PCC and SSIM. Each dot
+represents 1 of the 313 genes. Bottom, from left to right: bar plot of CMD; bar plot
+of the cell-type transfer ACC using predicted gene expression; receiver operating
+characteristic curves of four cell types, with area under the receiver operating
+characteristic (AUROC) curve annotated. Dashed lines indicate random guess. d,
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+the measured gene expression, but also extends predictions to areas
+with only H&E available (outside the red box).
+To evaluate whether the predicted gene expressions retain biological relevance, we first computed the correlation matrix distance (CMD)
+metric (Fig. 2c and Extended Data Fig. 2a), where SpatialEx achieved
+a score of 0.206, substantially lower than that of DeepPT (0.302) and
+CNN_Reg (0.271), indicating better agreement with the measured
+data (lower is better). We further evaluated the correlation between
+the spatial autocorrelation (Moran’s I) of the measured and predicted
+genes, demonstrating that SpatialEx more effectively preserves spatial
+autocorrelation patterns (Supplementary Fig. 2). Meanwhile, spatial
+domain identification using CellCharter40 on the hColon_Non_diseased,
+mouse_Colon and hSkin_Melanoma datasets revealed that domains
+derived from SpatialEx-predicted gene expression closely resembled
+those obtained using the measured gene expression across various
+spatial resolutions (Extended Data Fig. 5).
+To further assess biological relevance at single-cell resolution, we
+evaluated cell-type annotation accuracy (ACC) on the Human Breast
+Cancer dataset using predicted gene expression profiles. SpatialEx demonstrated superior performance across four major cell types in receiver
+operating characteristic (Fig. 2c), with comprehensive evaluation of
+additional cell types provided in Extended Data Fig. 6a. The spatial distribution of cell types annotated using SpatialEx’s predicted gene expression
+(Fig. 2e, bottom) showed strong concordance with annotations based on
+measured gene expression in slice 2 (Fig. 2e, top). In contrast, the cell-type
+annotations derived from DeepPT’s predicted expression appeared
+noticeably more disorganized (Extended Data Fig. 6b). SpatialEx enabled
+cell-type annotation in regions where only H&E images were available
+(beyond the sequenced area), which would be impossible without the SRT
+predicted by SpatialEx on slice 2 (Fig. 2e). This predicted result indicates
+that SpatialEx can easily extend to SRT-unmeasured regions, revealing
+more comprehensive tissue architecture across larger tissue.
+Then, we focused on two biologically distinct subtypes of myoepithelial cells characterized by marker genes: KRT15 and ACTA2, within
+the region of interest (ROI) highlighted by the red box in Fig. 2e. These
+subtypes are identifiable in slice 1 by annotation (Fig. 2f, top) and, due
+to tissue continuity, are expected to have a similar distribution on slice
+2. As shown at the bottom of Fig. 2f, SpatialEx successfully predicted the
+expression of KRT15 and ACTA2 on slice 2, enabling accurate subtype
+annotations. In contrast, the prediction from DeepPT is far from stratifying, failing to transfer the cell-type annotations successfully (Extended
+Data Fig. 6c). Looking across the entire tissue section (Fig. 2e, top), in
+the DCIS_1 region, far from the invasive tumor areas, both ACTA2v+ and
+KRT15+ myoepithelial cells are prominent. However, near the more invasive DCIS_2 areas, only ACTA2+ myoepithelial cells are observed. Then, in
+invasive tumor regions, both myoepithelial cell subtypes are absent. This
+finding confirms that the diminishment of myoepithelial cells is a critical hallmark of the transition of cancer from in situ to invasive stages25.
+
+Larger-panel spatial analysis through panel diagonal
+integration
+High-resolution spatial omics technologies typically face inherent
+limitations in feature panel size, for example, spatial transcriptomic or
+protein profiling4. Using spatial transcriptomics as an example, even
+Gene expression of EPCAM, ESR1 and PGR. The red box indicates the sequencing
+area. e, Visualization of cell-type transfer results. Top: annotations on slice 2.
+Bottom: transferred results from slice 1 to slice 2 using SpatialEx-predicted gene
+expressions. The zoomed-in ROI (black box) illustrates the transferred cell types
+outside the sequencing area. DCs, dendritic cells. f, The zoomed-in ROI (red box
+in Fig. 2e). Top: H&E image and spatial distribution of ACTA2+ and KRT15+ Myoepi.
+on slice 1. Bottom, from left to right: transferred cell type using SpatialExpredicted gene expression; measured expression of corresponding marker
+genes; SpatialEx-predicted marker expression on slice 2. Scale bars, 500 μm
+(d,e), 250 μm (f). Diagram in a created with BioRender.com.
+
+376
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+a
+
+b
+
+H&E-to-omics prediction
+Slice 1
+
+H&E imaging
+
+Features
+
+Measured
+
+SSIM
+
+0.8
+
+0.4
+
+SpatialEx
+better
+
+0.5
+
+Predicted
+
+Transcriptomics
+
+H&E images
+
+DeepPT
+
+SpatialEx
+
+PCC: 0.608
+
+PCC: 0.756
+
+PCC: 0.210
+
+PCC: 0.317
+
+PCC: 0.046
+
+PCC: 0.113
+
+0.3
+
+DeepPT
+better
+
+0.2
+
+Not measured
+
+EPCAM
+
+SpatialEx
+
+0.6
+
+SpatialEx
+
+0.7
+
+SpatialEx
+better
+
+H&E
+
+Measured
+
+d
+
+Quantitative comparison
+
+SpatialEx
+
+Cells
+
+Slice 1: in situ sequencing, then H&E imaging
+Slice 2: only H&E imaging
+
+PCC
+
+Slice 2
+
+Genes
+
+c
+
+H&E
+
+Serial human breast cancer tissues
+
+Slice 1
+
+Genes
+
+Xenium analyzer
+
+Slice 2
+
+DeepPT
+better
+0.1
+
+0.4
+
+0.6
+
+0.1
+
+0.8
+
+0.3
+
+DeepPT
+
+CMD
+
+ACC
+True positive rate
+
+0.48
+0.30
+0.44
+
+0.8
+SpatialEx,
+AUROC = 0.91
+
+0.6
+
+DeepPT,
+AUROC = 0.79
+
+0.2
+
+DeepPT,
+AUROC = 0.76
+
+ACTA2+ Myoepi.
+
+1.0
+
+True positive rate
+
+0.40
+
+0.36
+
+0.32
+
+SpatialEx
+
+SpatialEx,
+AUROC = 0.86
+
+0.4
+
+0
+
+0.25
+
+DeepPT
+
+Prolif. invasive tumor
+
+DCIS 1
+
+1.0
+
+0.35
+
+0.15
+
+DeepPT
+
+SpatialEx
+
+KRT15+ Myoepi.
+
+0.8
+
+SpatialEx,
+
+SpatialEx,
+AUROC = 0.83
+
+0.6
+
+AUROC = 0.90
+
+0.4
+DeepPT,
+AUROC = 0.63
+
+0.2
+0
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+DeepPT,
+AUROC = 0.60
+1.0 0
+
+False positive rate
+
+e
+
+0.7
+
+DeepPT
+
+0.52
+
+0.20
+
+0.5
+
+ESR1
+
+0.2
+
+PGR
+
+0
+
+Spatial 2
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+1.0
+
+Spatial 1
+
+Low
+
+False positive rate
+
+High
+
+Gene expression level
+
+f
+
+Transfer cell-type annotation
+from slice 1 (H&E + SRT) to slice 2 (only H&E)
+
+Reference on slice 1
+
+Cell-type annotations
+Histology image
+
+DCIS_2
+
+ACTA2+ Myoepi.
+
+KRT15+ Myoepi.
+
+DCIS_1
+
+Spatial 2
+
+Invasive
+DCIS_2
+
+Transfer on slice 2
+
+Spatial 1
+
+ACTA2+ Myoepi.
+
+ACTA2 (measured)
+
+ACTA2 (SpatialEx)
+
+3.5
+3.0
+2.5
+2.0
+1.5
+1.0
+0.5
+0
+
++
+
+KRT15 (measured)
+
+KRT15 (SpatialEx)
+3.0
+
+Spatial 2
+
+2.5
+
+Stromal
+Invasive tumor
+DCIS_1
+DCIS_2
+Endothelial
+
+2.0
+1.5
+Spatial 1
+Macrophages_1
+Macrophages_2
+ACTA2+ Myoepi.
+KRT15+ Myoepi.
+
+1.0
+B cells
+CD8+ T cells
+CD4+ T cells
+Prolif. invasive tumor
+
+Perivascular-like
+LAMP3+ DCs
+IRF7+ DCs
+Mast cells
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+0.5
+0
+ACTA2+ Myoepi.
+
+KRT15+ Myoepi.
+
+Gene expression level
+
+KRT15 Myoepi.
+
+Gene expression level
+
+Cell-type transfer using
+SpatialEx predicted expression
+
+Others
+
+377
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+advanced platforms such as 10x Xenium can only profile a restricted
+number of genes simultaneously. We developed SpatialEx+ to overcome
+this fundamental constraint through panel diagonal integration (Fig. 3a).
+The approach combines experimental profiling of different gene
+panels across tissue sections with computational integration using
+H&E images as anchors. While we modified DeepPT to enable independent model building for each panel, SpatialEx+ broke this isolation through its new omics cycle module, which uniquely regularizes
+each omics-specific prediction.
+To evaluate SpatialEx+’s panel expansion capabilities, we applied
+a complementary panel design using the 10x Xenium Human Breast
+Cancer dataset25. We divided its 313-gene panel into two nonoverlapping sets (panel A 150 genes, panel B 163 genes) and assigned panel A to
+slice 1 and panel B to slice 2 for measurement, creating a scenario where
+adjacent sections have complementary gene coverage. The measured
+expression of the held-out panel (panel B in slice 1 and panel A in slice 2)
+served as ground truth for quantitative evaluation. Quantitative assessment demonstrated SpatialEx+’s superior performance across multiple
+metrics (Fig. 3b). Gene-level comparisons showed consistently higher
+PCC and SSIM values compared to DeepPT. In this experimental setting,
+we also validated the effectiveness of each component of SpatialEx+,
+as shown in Supplementary Fig. 3.
+To validate biological relevance, CMD metrics confirmed
+SpatialEx+’s enhanced ability to preserve both cell-to-cell and
+gene-to-gene relationships present in the original data. In addition,
+SpatialEx+ more effectively maintained the spatial autocorrelation of gene expression (Supplementary Fig. 4). We further evaluated spatial domain identification using CellCharter (Methods).
+SpatialEx+ achieved (28–66%) improvement in normalized mutual
+information (computed against CellCharter labels using measured
+full panel for each clustering resolution) across various resolution
+scales compared to DeepPT, demonstrating robust performance
+(Fig. 3b and Supplementary Fig. 5). Quantitative results of spatial
+domain identification across different tissue types (such as skin
+melanoma and healthy colon) are shown in Supplementary Fig. 6,
+demonstrating the generalizability of SpatialEx+ across diverse tissue types. Cell-type ACC, assessed through tenfold cross-validation,
+showed substantial improvement when using SpatialEx+’s expanded
+gene panels compared to single-panel baseline (indicated by gray
+horizontal line in Fig. 3b). This improvement highlights both the
+importance of comprehensive gene panels and SpatialEx+’s effectiveness in panel expansion.
+In Fig. 3c, we presented the measured expressions of the genes
+ESR1 and ERBB2 in slice 1, as well as PGR and KRT14 in slice 2, alongside
+the predicted expression distributions obtained using DeepPT and
+SpatialEx+. Among these genes, the estrogen receptor (ESR1), progesterone receptor (PGR) and human epidermal growth factor receptor
+2 (HER2, ERBB2) are three crucial ones for breast cancer subtyping25.
+From the results in Fig. 3c, it is evident that the gene expressions from
+DeepPT substantially deviate from the ground truth and are limited to
+the sequencing-covered regions. The DeepPT-predicted ESR1+ covers
+most of the slice, conflicting the measured results. In addition, the
+PGR gene is expressed in only a small subset of cells within the blue
+box, which can be successfully captured only by SpatialEx+ (Fig. 3c).
+
+This finding underscores SpatialEx+’s ability to accurately predict the
+expression of disease-related genes.
+The impact of panel expansion became evident in spatial domain
+analysis. Initial domain identification using separate panels showed
+marked inconsistencies between slices (Fig. 3d). After SpatialEx+ integration, spatial domains showed strong alignment between sections
+(Fig. 3e), enabling unified tissue architecture analysis impossible with
+single-panel approaches (comparative analysis with DeepPT shown
+in Supplementary Fig. 7). This demonstrates SpatialEx+’s ability to
+overcome coverage limitations while maintaining biological fidelity.
+
+Fig. 3 | SpatialEx+ enables larger panel spatial analysis through panel diagonal
+integration. a, Schematic diagram for SpatialEx+ panel diagonal integration. For
+experimental process, two serial tissue sections were sequenced using Xenium,
+measuring panel A on slice 1 and panel B on slice 2. For computational process,
+SpatialEx+ bridges the diagonal gene expression matrix by H&E images, enabling
+more comprehensive gene expression across both slices. FFPE, formalin-fixed
+paraffin-embedded. b, Quantitative comparison between SpatialEx+ and DeepPT.
+Top: scatter plots of PCC and SSIM. Each dot represents 1 of the 313 genes (150 for
+panel A and 163 for panel B). Bottom, from left to right: scatter plot of the CMD
+on the two slices, with the x and y axes representing the gene and cell dimension,
+
+respectively; line plot of normalized mutual information (NMI) of spatial domain
+identification using predicted panels across varying domain numbers; the
+violin plot of ACC from tenfold cross-validation for cell-type transfer task using
+predicted full-panel gene expression, with the dash line indicating the ACC using
+the measured small panel. c, Visualization of gene expressions: ESR1 and ERBB2 on
+slice 2, and PGR and KRT14 on slice 1. The red box indicates the sequencing area.
+d, Left: spatial domain identified on slice 1 using measured panel A. Right: spatial
+domain identified on slice 2 using measured panel B. e, Spatial domain identified
+on the two slices using SpatialEx+ predicted full panel (panel A + B). Scale bars,
+1 mm (c–e). Schematic in a created with BioRender.com.
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+Scalability on million-cell tissue sections
+To validate scalability, we applied SpatialEx+ to consecutive large-scale
+tissue sections from the 10x Xenium website, each containing approximately 900,000 cells (Fig. 4a). To simulate complementary panel
+analysis, we divided the 280-gene Xenium panel equally between the
+two adjacent sections and applied SpatialEx+ for diagonal integration
+using H&E images as anchors (Fig. 4b).
+Quantitative evaluation demonstrated SpatialEx+’s superior performance at scale (Fig. 4c). Gene-level comparisons showed consistently higher PCC and SSIM values compared to DeepPT, while CMD
+measurements confirmed better preservation of both gene–gene and
+cell–cell relationships (Fig. 4c). Following the same spatial domain
+identification setup as in the previous section, SpatialEx+ again outperformed DeepPT across varying numbers of domains (Fig. 4c).
+We validated biological relevance through analysis of cancer-associated genes (Fig. 4d). In Fig. 4d, we visualized the gene expressions of FBLN1 in slice 2 and LUM in slice 1, predicted by SpatialEx+
+and DeepPT. FBLN1 is associated with cell transformation and tumor
+invasion57,58, promoting breast cancer cell survival during doxorubicin
+treatment59. And previous study has shown that lumican60, encoded by
+LUM, is overexpressed in the breast cancer stroma and may influence
+tumor invasion and metastasis by modulating matrix structure and
+collagen arrangement. Based on the visualizations, DeepPT fails to
+effectively capture the spatial expression patterns of these two genes,
+as evidenced by numerous instances of abnormal overexpressions or
+underexpressions (Fig. 4d). In contrast, the gene expression predicted
+by SpatialEx+ closely resembles the ground truth patterns for both
+genes. We visualized spatial expression patterns of more genes in
+Extended Data Fig. 7.
+The impact of panel expansion became evident in fine-grained
+spatial analysis (Fig. 4e). Figure 4e illustrates the zoomed-in tissue
+region in terms of identified spatial domains in slice 1 across different
+analysis settings, including measured panel A only (Fig. 4e, middle) and
+measured panels A and B (Fig. 4e, bottom). When only measured panel
+A is used for analysis, the detected domains lead to crucial fine-grained
+domains being completely overlooked (Fig. 4e, middle). By combining the measured genes with the predicted genes, we successfully
+distinguished the immune area and the stromal area (validated in the
+following functional analysis), as indicated by the arrows at the bottom of Fig. 4e. The domain distribution closely resembles the results
+obtained using the two measured full panel in Supplementary Fig. 8.
+Notably, we consulted senior pathologists to annotate this tissue region
+(Fig. 4e, top), but they were unable to distinguish the immune and
+
+378
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+a
+
+b
+
+Quantitative comparison between DeepPT and SpatialEx+
+PCC
+
+Xenium analyzer
+
+Panel A
+
+0.8
+
+H&E imaging
+
+SSIM
+
+1.0
+
+SpatialEx+
+better
+
+SpatialEx+
+better
+
+0.8
+
+Legend for PCC and SSIM
+
+DeepPT better, panel B on slice 1
+SpatialEx+ better, panel B on slice 1
+
+SpatialEx+
+
+0.6
+
+Panel B
+
+DeepPT
+better
+
+Experimental process
+0
+
+Computational process (panel diagonal integration)
+Slice 2
+
+Slice 1
+
+Features
+
+Panel A Panel B H&E
+
+Panel A Panel B H&E
+
+Cells
+
+0
+
+0.2
+
+0.4
+
+Slice 2
+
+SpatialEx+
+
+Measured
+
+Not measured
+
+Predicted
+
+Panel A
+
+Panel B
+
+H&E images
+
+0.6
+
+0.8
+
+0
+
+0.2
+
+0.4
+
+0.6
+
+DeepPT, panel A on slice 2
+SpatialEx+, panel A on slice 2
+
+0.8
+
+1.0
+
+DeepPT
+
+CMD
+
+Spatial domain identification
+under varied resolutions
+
+Tenfold cell-type
+classification
+0.79
+
+0.60
+
+0.18
+
+Only panel B
+
+0.55
+0.16
+
+Better biological
+conservation
+
+0.14
+0.12
+
+0.77
+
+0.50
+0.45
+
+0.75
+Only panel A
+
+0.40
+
+0.73
+
+0.35
+0.26
+
+0.28
+
+Visualize gene expression from panel A on slice 2
+ESR1
+
+0
+
+SpatialEx+, panel B on slice 1
+
+DeepPT
+
+0.30
+
+0.32
+
+Gene by gene
+
+c
+
+DeepPT, panel B on slice 1
+
+DeepPT
+better
+
+0.2
+
+0.65
+
+Cell by cell
+
+Slice 1
+
+SpatialEx+ better, panel A on slice 2
+
+Legend for the below three plots
+
+0.4
+
+0.2
+
+H&E imaging
+
+DeepPT better, panel A on slice 2
+
+ACC
+
+Xenium analyzer
+
+0.4
+
+NMI
+
+Serial FFPE slices
+
+0.6
+
+10 11 12 13 14 15 16 17 18 19 20
+
+Number of domains
+
+Slice 1
+
+Slice 2
+
+Visualize gene expression from panel B on slice 1
+
+ERBB2
+
+PGR
+
+KRT14
+
+Measured
+
+High
+
+PCC: 0.034
+
+PCC: 0.415
+
+PCC: 0.369
+
+PCC: 0.661
+
+PCC: 0.144
+
+PCC: 0.650
+
+Spatial 2 SpatialEx +
+
+DeepPT
+
+PCC: 0.563
+
+Gene expression level
+
+PCC: 0.225
+
+Low
+Spatial 1
+
+d
+
+e
+
+Before SpatialEx+ panel expansion
+Slice 2
+
+Slice 1
+
+Spatial 2
+
+Spatial 2
+
+Slice 1
+
+Spatial 1
+
+Unaligned
+spatial domains
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+After SpatialEx+ panel expansion
+
+0
+1
+2
+3
+4
+5
+
+6
+7
+8
+9
+10
+
+Slice 2
+
+Spatial 1
+
+Aligned
+spatial domains
+
+0
+1
+2
+3
+4
+5
+
+6
+7
+8
+9
+10
+
+379
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+b
+
+Panel diagonal integration
+Slice 1
+
+Slice 2
+
+Slice 1
+
+Cells
+
+Measured
+
+c
+
+Panel A
+
+Panel B
+
+H&E images
+
+Quantitative comparison between DeepPT and SpatialEx+
+PCC
+
+SSIM
+
+1.0
+
+0.2
+
+DeepPT
+better
+
+0.1
+
+0.4
+
+DeepPT
+better
+
+0.1
+
+0.2
+
+0.3
+
+0.35
+
+0.20
+
+0.30
+0.25
+
+0.18
+
+Better biological
+conservation
+
+0.16
+
+0.2
+
+0.4
+
+0.6
+
+0.8
+
+0.15
+
+1.0
+
+0.05
+
+0.30 0.35 0.40 0.45 0.50
+
+DeepPT
+
+Legend for PCC and SSIM
+DeepPT better, panel B on slice 1
+SpatialEx+ better, panel B on slice 1
+
+0.20
+
+0.10
+
+0.12
+0
+
+0.4
+
+DeepPT
+
+0.22
+
+0.14
+
+0
+
+0
+
+Spatial 2
+
+0.6
+
+0.2
+
+0
+
+Spatial 1
+
+Cell by cell
+
+SpatialEx+
+
+SpatialEx+
+
+0.8
+
+SpatialEx+
+better
+
+0.3
+
+Spatial domain identification
+under varied resolutions
+
+CMD
+
+SpatialEx+
+better
+
+0.4
+
+d
+
+SpatialEx+
+Predicted
+
+Not measured
+
+Slice 2
+Panel A Panel B H&E
+
+Panel A Panel B H&E
+
+Features
+
+Large-area tissue
+(1,778,489 cells in total)
+
+NMI
+
+a
+
+10 11 12 13 14 15 16 17 18 1920
+
+Gene by gene
+
+Number of domains
+
+Legend for CMD and spatial domain identification
+DeepPT better, panel A on slice 2
+DeepPT, panel B on slice 1
+SpatialEx+, panel B on slice 1
+SpatialEx+ better, panel A on slice 2
+
+DeepPT better, panel A on slice 2
+SpatialEx+ better, panel A on slice 2
+
+e
+
+Spatial gene expression visualization
+
+Manual annotation
+
+Panel A on slice 2
+FBLN1
+(measured)
+
+DeepPT
+PCC: 0.189
+
+SpatialEx+
+PCC: 0.461
+
+Spatial expression data preprocessing,
+H&E image registration
+
+Spatial 2
+
+Training and testing data preparation
+Slice 1: H&E image and panel A ST data
+Slice 2: H&E image and panel B ST data
+
+Spatial 1
+
+Quantitative comparison
+
+Panel B on slice 1
+LUM
+(measured)
+
+DeepPT
+PCC: 0.280
+
+SpatialEx+
+PCC: 0.406
+
+Slice 1: ground truth for panel B
+Slice 2: ground truth for panel A
+
+Spatial 2
+
+Spatial 2
+
+Model training
+(SpatialEx+ and DeepPT)
+
+Spatial 1
+
+Invasive tumor
+
+Connective tissue
+
+Only measured panel A
+
+Spatial 1
+Visual comparison against
+ground truth
+
+SpatialEx+ predicted full panel (panel A + B)
+Immune area
+
+Spatial 2
+
+Spatial 2
+
+Spatial domain identification using
+SpatialEx+ predicted expression
+
+Enrichment analysis on
+the domain of interest
+
+Spatial 1
+
+Low
+
+High
+
+Stromal area
+
+Spatial 1
+
+Gene expression level
+
+3.5
+3.0
+
+MMP2
+
+2.5
+
+ACTA2
+
+2.0
+
+Spatial 2
+
+1.5
+
+CXCL12
+PDGFRA
+
+1.0
+0.5
+
+Spatial 1
+
+LYZ
+
+LYZ (measured)
+
+PTPRC
+
+LYZ (SpatialEx+ predicted)
+
+3.0
+2.5
+2.0
+
+IFGAX
+
+1.5
+
+Fraction of cells
+in group (%)
+10 30 50 70 90
+
+Mean expression
+in group
+
+Spatial 2
+
+CD68
+
+1.0
+0.5
+
+Spatial 1
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+0
+
+2
+3
+
+4
+5
+
+6
+7
+
+8
+9
+
+10
+11
+
+12
+
+GO terms
+Response-regulating cell surface receptor signaling pathway
+Mononuclear cell differentiation
+Lymphocyte diffrentiation
+Immune response-activating cell surface receptor signaling pathway
+Immune response-activating signal transduction
+Negative regulation of immune system process
+Antigen receptor-mediated signaling pathway
+Activation of immune response
+Lymphocyte proliferation
+Mononuclear cell proliferation
+
+Gene expression level
+
+FCER1G
+
+0
+
+g
+Domain 7
+
+LUM
+
+LUM (SpatialEx+ predicted)
+
+Domains 0 and 4
+
+LUM (measured)
+
+Gene expression level
+
+f Domains: 7 4 0
+
+0
+1
+
+0
+
+Positive regulation of cell–cell adhesion
+External encapsulating structure organization
+Extracellular structure organization
+Extracellular matrix organization
+Positive regulation of cell adhesion
+Negative regulation of cell adhesion
+Regulation of T cell activation
+Regulation of cell–cell adhesion
+Leukocyte cell–cell adhesion
+Regulation of leukocyte cell–cell adhesion
+
+5
+
+10
+
+15
+
+–log(adjusted P)
+
+380
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Fig. 4 | Scalability on million-cell tissue sections. a, The H&E image of large-area
+tissues from the Xenium Human Breast IDC Big dataset. b, The computational
+process for analyzing two large tissue slices. c, Quantitative comparison of
+DeepPT and SpatialEx+ performance. From left to right: scatter plots of PCC
+and SSIM, with each dot representing 1 of the 280 genes (140 for panel A and
+140 for panel B); scatter plot of the CMD between SpatialEx+ and DeepPT on
+the two slices, with the x and y axes representing the gene and cell dimension,
+respectively; line plot of NMI of spatial domain identification using predicted
+panels across varying domain numbers. d, Visualization of gene expressions:
+
+FBLN1 on slice 1 and LUM on slice 2. e, Top: pathologist-annotated H&E images
+of slice 1. Center: spatial domains identified using measured panel A. Bottom:
+spatial domains identified using SpatialEx+ predicted full panel (panel A + B).
+f, Left: dot plot of differentially expressed genes in domains 0, 4 and 7 from
+e, bottom. Right: spatial expressions of LYZ and LUM in the ROI. g, GO terms
+enriched for the markers of domain 7, and domains 0 and 4. The length of the
+bar represents the −log10(adjusted P value) from one-tailed Fisher’s test. P values
+were corrected for multiple-hypothesis testing using the Benjamini–Hochberg
+method. Scale bars, 1 mm (a,e,f), 1.5 mm (d).
+
+stromal regions based on histological features, indicating the additional insights brought by the gene expression information. We next
+examined these distinctions through functional analysis. Given the
+domains 0, 4 and 7 are particularly identified after integrating the gene
+panels, we performed differential gene expression analysis on these
+domains, and found that the critical markers for these regions, such
+as LUM and LYZ, are primarily located on panel B (Fig. 4f and Supplementary Fig. 9). Gene ontology (GO) analysis of these domains (Fig. 4g)
+provided functional characterization of the tissue architecture: Genes
+highly expressed in domain 7 were enriched for immune response
+pathways (GO:0002253, adjusted P value 4.69 × 10−9), while domains
+0 and 4 showed enrichment for extracellular matrix and cell adhesion
+processes (GO:0022407, adjusted P = 5.61 × 10−6). These molecular
+signatures from the expanded panel were essential for comprehensive
+characterization of the tissue’s functional organization, highlighting
+the necessity of panel expansion for detailed spatial analysis.
+
+Given the technique challenges associated with spatial multi-omics
+sequencing from assay, existing studies generate the spatial multi-omics
+data by aligning serially profiled single-omics sections to construct a
+multi-omics dataset. Nevertheless, variations in cellular distribution
+between sections render this alignment strategy suboptimal. In this
+section, we used SpatialEx+ to reconstruct the spatial multi-omics data
+in an end-to-end function with H&E images as the linkage anchor. The
+omics diagonal integration analysis was performed on two datasets to
+demonstrate its potential and applicability.
+The first transcriptomic–protein integration dataset is from
+Human Breast Cancer dataset25, which consists of two slices, with the
+first one sequenced by Xenium and Immunofluorescence, and the
+second one only sequenced by Xenium. We used the protein data of
+slice 1 and gene expression data of slice 2 to simulate the serially profiled sections with different omics (Fig. 5a). We presented the spatial
+expression of the protein HER2 and CD20 in Fig. 5b, including the
+measured expression on slice 1, the SpatialEx+ expanded expression to
+the whole slide on slice 1, and the whole slide on slice 2. Furthermore,
+we illustrated the spatial expression of their corresponding marker
+genes, with ERBB2 encoding HER2 and MS4A1 encoding CD20. The visualization demonstrates that SpatialEx+ not only accurately predicted
+their expression patterns but also expanded the sequencing region,
+ensuring a comprehensive panorama of the whole breast cancer slice.
+At the same time, we specifically zoomed in the spatial distribution of
+
+CD20 and its corresponding gene MS4A1. The remarkable consistency
+of expressions across different slices validates that SpatialEx+ can
+precisely capture fine-grained spatial omics patterns. These results
+demonstrate that our SpatialEx+ effectively performs omics diagonal
+integration while generating both omics layers for a single tissue slice.
+Quantitative performance metrics are detailed in Extended Data Fig. 8a.
+We then validated SpatialEx+ on the second metabolomics–
+transcriptomics data. The dataset consists of mouse brain slices generated using the spatial multimodal analysis protocol14 (Fig. 5c). We
+processed the dataset to accommodate the omics diagonal integration,
+that is, H&E image and metabolomics data on slice 1, H&E image and
+transcriptomics data on slice 2. Spatial metabolomics data on slice 1
+are obtained using the matrix-assisted laser desorption/ionization–
+mass spectrometry imaging technique, while spatial gene expression
+data on slice 2 are generated through Visium sequencing. Notably,
+each tissue slice comprises an intact hemisphere of healthy tissue
+alongside a lesioned hemisphere, modeled to represent Parkinson’s
+disease through unilateral 6-hydroxydopamine administration (Fig. 5d,
+first row). First, we performed spatial domain identification on the
+metabolic data from slice 1 and the transcriptomics data from slice 2,
+respectively. The results reveal that the metabolic data is insufficient
+to resolve the brain anatomy structures, while using SRT data fails to
+distinguish the lesioned and intact choroid plexus (Fig. 5d, second
+row). After using SpatialEx+ on this data, each slice is equipped with
+both SRT and spatial metabolomics. Feeding the generated spatial
+multi-omics data into the state-of-the-art multi-omics analysis algorithm SpatialGLUE38, both the anatomic and pathological domains,
+including CP_lesion and CP_intact, could be identified successfully
+(Fig. 5d, third row), demonstrating the necessity of the generated different omics data and the utility of SpatialEx+ in a wide range analysis.
+A plausible reason for this phenomenon is that SpatialEx+ not only
+links histology and omics, but also introduces the omics cycle module
+to establish omics–omics associations. Quantitative performance
+metrics are detailed in Extended Data Fig. 8b,c.
+Figure 5e (left) quantitatively shows the expression of a selected
+differentially expressed metabolic m/z 674.28592, as well as two genes,
+Tac1 and Rgs7bp, in CP_lesion and CP_intact. Figure 5e (right) and
+Extended Data Fig. 8d,e qualitatively illustrate the spatial distribution of these differentially expressed metabolites or genes. Here, m/z
+674.28592 has been identified as highly associated with Parkinson’s
+disease by the original paper14, and its accurate identification is crucial
+for building a robust multi-omics transition model. The Tac1 gene
+
+Fig. 5 | SpatialEx+ enables spatial multi-omics through omics diagonal
+integration. a, Schematic diagram for spatial transcriptomics–proteomics data
+diagonal integration using SpatialEx+. b, Visualizations of protein CD20 and
+HER2 and their coding genes, MS4A1 and ERBB2. Measured expression on slice 1,
+and whole-slide predictions of SpatialEx+ on both slices are shown. c, Schematic
+diagram of spatial transcriptomics–metabolomics data diagonal integration
+using SpatialEx+. DE, differentially expressed; MALDI–MSI, matrix-assisted laser
+desorption/ionization–mass spectrometry imaging; WSI, whole-slide image.
+d, Top: spatial domain annotations of both slices. Center: spatial domains
+identified using measured omics, metabolomics on slice 1 and transcriptomics
+on slice 2. Bottom: spatial domain identification using SpatialEx+ supplemented
+multi-omics for both slices. e, Left: scatter plots of m/z 674.28592 expression
+
+between lesion (n = 478 spots) and intact (n = 466 spots) choroid plexus (CP)
+regions on slice 1, and Tac1 and Rgs7bp expression lesion (n = 420 spots) and
+intact (n = 297 spots) CP regions on slice 2. Two-sided unpaired Wilcoxon ranksum tests were used to compare the differential, with P values shown. In the
+boxplot, the center line, center dot, box limits and whiskers denote the median,
+mean, upper and lower quartiles and 1.5× interquartile range, respectively. Right:
+visualizations of metabolite m/z 674.28592, genes Tacl and Rgs7bp. f, GO terms
+enriched for the genes highly expressed within the intact CP region. The length
+of the bar represents the −log10(adjusted P) from one-tailed Fisher’s test. P values
+were corrected for multiple-hypothesis testing using the Benjamini–Hochberg
+method. Scale bars, 1 mm (b), 250 μm (zoomed-in b), 500 μm (d,e). Schematic in
+a and illustration in c created with BioRender.com.
+
+Spatial multi-omics through omics diagonal integration
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+381
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+encodes tachykinin peptide61, which is believed to function as a neurotransmitter, and the Rgs7bp gene may be associated with risk of
+aspirin-exacerbated respiratory disease62. SpatialEx+ complements
+the gene and metabolite expression in the cortical areas outside the
+
+a
+
+original sequencing area, enabling multi-omics data of the mouse
+brain across the whole section. The m/z 674.28592 are primarily presented in the intact caudate putamen, while the spatial expression
+patterns of Tac1 and Rgs7bp exhibit a unilateral enrichment trend. The
+Omics diagonal integration
+
+Slice 1
+
+H&E imaging
+
+H&E
+
+Features
+
+Serial tissue sections
+
+b
+
+SpatialEx+
+
+Measured
+
+Transcriptomics
+
+Not measured
+
+Proteomics
+
+Predicted
+
+H&E images
+
+Cells
+Visualization of the corresponding coding gene
+
+Visualization of the protein expression
+Measured (slice 1)
+
+Slice 2
+Genes Proteins H&E
+
+H&E imaging
+
+Immunofluorescence
+
+Slice 1
+Genes Proteins
+
+Xenium analyzer
+
+Slice 2
+
+SpatialEx+ (slice 1)
+
+SpatialEx+ (slice 2)
+
+Measured (slice 1)
+
+SpatialEx+ (slice 1)
+
+SpatialEx+ (slice 2)
+
+Spatial 2
+
+MS4A1
+
+Protein/gene expression level
+
+CD20
+
+HER2
+
+ERBB2
+
+High
+
+Spatial 1
+
+Low
+
+Mouse brain tissue
+
+Serial slices
+
+Slice 1: Metabolomics + H&E image
+MALDI–MSI
+
+Training and testing data preparation
+Slice 2: Transcriptomics + H&E image
+
+H&E
+
+Slice 1: H&E image + spatial metabolomics
+Slice 2: H&E image + spatial transcriptomics
+
+d
+
+Visium
+
+Spatial domain identification
+Slice 1
+
+Slice 2
+
+Only metabolomics
+
+Only transcriptomics
+
+ACB
+CP_lesion
+CP_intact
+CTX
+LSX
+MSC
+OT
+VL
+aco
+cc
+nan
+
+Spatial 2
+
+Spatial omics data preprocessing,
+H&E image registration
+
+Annotation
+
+c
+
+Spatial 1
+
+Omics diagonal integration
+
+Spots
+
+e
+
+Spatial 1
+DE analysis on metabolomics
+and transcriptomics
+
+Enrichment analysis on DE genes
+Measured
+
+Not measured
+
+Predicted
+
+Metabolomics
+
+Transcriptomics
+
+H&E images
+
+DE metabolites
+or genes
+CP_intact
+
+Spatial multi-omics (transcriptomics and metabolomics)
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+Spatial 2
+
+SpatialEx+
+
+Multi-omics spatial
+domain identification
+
+H&E
+
+H&E
+
+Features
+
+Slice 2
+
+After SpatialEx+
+
+Slice 1
+
+Metabolites Genes
+
+Slice 2
+
+Metabolites Genes
+
+Slice 1
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+
+Spatial 2
+
+Predict missing omics on WSIs
+
+Before SpatialEx+
+
+SpatialEx+ model training
+
+Spatial 1
+
+f
+
+Visual comparison against ground truth
+Slice 2
+
+Slice 1
+
+Measured
+
+CP_lesion–
+
+SpatialEx+
+
+Measured
+
+SpatialEx+
+
+Dopamine secretion
+
+High
+
+2 × 106
+1 × 106
+0
+56
+
+P = 5.454 × 10
+
+20
+
+Tac1
+
+15
+10
+5
+0
+
+Rgs7bp
+
+20
+15
+10
+5
+0
+
+Spatial 2
+
+60
+
+P = 1.385 × 10
+
+Low
+Spatial 1
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+(
+
+Only H&E image available )
+
+Metabolite/gene expression level
+
+m/z
+674.28592
+
+113
+
+P = 3.967 × 10
+
+CP (intact)
+
+GO terms
+
+Genes
+Pcp4, Prkcb,
+Gabbr1, Syt11,
+Kcna2, Cnr1,
+Syt2
+
+Regulation of dopamine secretion
+Catecholamine transport
+Monoamine transport
+Dopamine transport
+
+Cplx2, Prkcb,Nrxn3
+Sptbn2, Prkce,
+Atp2a2, Drd1, Prkcg,
+Rph3a, Unc13c,
+Mctp1, Syt2
+
+Regulated exocytosis
+Signal release from synapse
+Neurotransmitter secretion
+Regulation of neurotransmitter levels
+Neurotransmitter transport
+5
+
+10
+
+15
+
+–log(adjusted P)
+
+382
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+d
+
+PCC
+
+CD3E
+
+0.24
+0.22
+0.20
+
+Spatial 1
+
+b High overlapping rate
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Stride
+
+6
+
+7
+
+8
+
+9
+
+Within window
+Within sequencing area
+Within window (fitted)
+Within sequencing area (fitted)
+
+Stride 0
+
+e
+
+Stride 1
+
+3.0
+2.5
+
+CTTN
+
+0
+
+3.5
+3.0
+2.5
+2.0
+1.5
+1.0
+0.5
+0
+
+2.0
+1.5
+1.0
+0.5
+0
+
+Spatial 1
+
+Gene
+expression level
+
+0.18
+
+Spatial 2
+
+Sequencing
+area
+Whole-slide
+image
+
+SpatialEx+
+(nonoverlap)
+
+Gene
+expression level
+
+Sliding window 0.28
+(training set)
+0.26
+
+SpatialEx+
+(complete overlap)
+
+Measured
+
+Spatial 2
+
+c
+
+a
+
+Sliding window
+
+Sequencing area
+
+SOView on SpatialEx+ predicted expression (nonoverlap)
+Slice 1
+
+Slice 2
+
+Stride 2
+
+Spatial 2
+
+Spatial 2
+
+Low overlapping rate
+
+…
+
+…
+Stride 9
+
+Spatial 1
+
+Spatial 1
+
+Fig. 6 | SpatialEx+ is robust even when there is weak or no overlap between
+slices. a, The definition of whole-slide image, sequencing area and sliding
+window. b, Illustration of sliding windows striding from highly to low overlapping
+scenarios. c, Bar plot of SpatialEx+’s performance under different sliding strides.
+Green and purple denote window-level and full-area performance, respectively.
+
+Curves represent fitted trends. d, Spatial visualizations of selected genes (CD3E
+and CTTN) at stride 1 (complete overlap) and at stride 9 (nonoverlap) from
+SpatialEx+. e, SOView visualization of SpatialEx+ predicted expression at stride 9
+(nonoverlap). Scale bar, 1 mm (d,e).
+
+metabolic expressions generated by our proposed SpatialEx+ closely
+resemble the ground truth distribution. Specifically, the metabolic
+expression levels across different functional regions exhibit a high
+degree of similarity to the ground truth (Fig. 5e, right). The predicted
+distributions of the two genes (Tac1 and Rgs7bp) also closely align
+with the measured ground truth gene distributions. Moreover, we
+performed GO enrichment analyses on the genes in the intact region
+of the mouse brain sample, and the results indicated that this group of
+genes is associated with dopamine (Fig. 5f). The aforementioned two
+sets of multi-omics experiments demonstrate that by using SpatialEx+
+to complete multi-omics data on the serial tissue slice, it provides a
+more comprehensive understanding of disease mechanisms from
+different biological layers.
+
+configurations during training, all performance evaluations were conducted using the true measured data across the entire sequencing area.
+SpatialEx+ demonstrates strong robustness, with minimal performance decline observed across varied overlap rates (evidenced
+by the flat trend of both within window and within sequencing area
+curves in Fig. 6c). This highlights the potential capability of SpatialEx+
+in a scenario in which the sequencing area can be expanded through
+serial slices. The quantitative results across the entire sequencing area
+show only a small difference compared to the results within the window
+(evidenced by the small difference between purple and green bars for
+each stride in Fig. 6c), providing quantitative evidence of the generalizability of SpatialEx+ in extending the sequencing area to larger area.
+The immune cell marker CD3E63 and the tumor cell marker CTTN64 are
+visualized in Fig. 6d, while additional gene visualizations can be found
+in Extended Data Fig. 9. The results demonstrate that SpatialEx+ is
+capable of accurately reconstructing the true spatial distribution of
+important markers, regardless of whether the serial slices are fully
+overlapping or completely nonoverlapping. Notably, each slice used
+for training contained only 20,000 to 30,000 cells within the windows,
+compared to over 100,000 cells across the entire sequencing area,
+which demonstrated that SpatialEx+ was able to generalize accurately
+on H&E images that were not available during training. Subsequently,
+under the experimental setup with no overlap (stride 9), the gene
+expression predicted by SpatialEx+ on the two slices was input into
+CellCharter for joint spatial domain identification. We first input the
+genes predicted by SpatialEx+ on the two slices into CellCharter to
+generate spatially aware embeddings of each cell, and then visualize
+the results using SOView65, which is designed for visualization and
+analysis of high-plex spatial omics data. The spatial domain results are
+consistent across both slices, and the tissue structure is clearly delineated (Fig. 6e). Moreover, Supplementary Fig. 11 explores how varying
+sample sizes affect the performance of gene expression prediction.
+
+Robustness when there is weak or no overlap between slices
+While previous sections demonstrated SpatialEx+’s capabilities on
+adjacent serial sections, here we evaluate its performance under more
+challenging conditions that violate the adjacent section requirement.
+Specifically, we test scenarios with substantial spatial differences and
+sections lacking overlapping regions, conditions commonly encountered in practical applications.
+To systematically evaluate robustness, we simulated different
+sequencing area configurations between adjacent slices using a sliding
+window approach, while using the actual measured data from the entire
+sequencing area for evaluation (Fig. 6a). Starting from the center of the
+maximum overlapping region between two slices (Supplementary Fig.
+10a), we systematically shifted the simulated sequencing windows along
+opposite x axis directions while maintaining consistent cell numbers
+through dynamic selection (Supplementary Fig. 10b). This generated
+a spectrum of test cases from fully overlapping sequencing areas (no
+sliding) to completely nonoverlapping areas (stride 9) (Fig. 6b). While
+we used these sliding windows to simulate different sequencing area
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+383
+
+Article
+
+Discussions
+In this study, we addressed important challenges in spatial multi-omics
+analysis through SpatialEx and SpatialEx+, frameworks that enable
+high-parameter spatial profiling and multi-omics integration using
+histology as an anchor. Our approach overcomes key limitations of
+existing methods by enabling comprehensive molecular profiling without requiring complex simultaneous multi-omics comeasurements.
+Our comprehensive evaluations across multiple experimental
+scenarios—from small-scale validations to million-cell tissue sections,
+from single-modality expansions to multi-omics integrations, and
+from ideal adjacent sections to challenging nonoverlapping configurations—demonstrate SpatialEx+’s capabilities as a versatile and robust
+solution for spatial molecular data analysis.
+However, several important challenges remain for advancing
+spatial diagonal integration. First, current implementations assume
+consistent spatial resolution across different measurements. Future
+developments should address cross-slice integration where spatial resolutions vary between modalities, potentially through adaptive resolution mapping, multi-scale integration approaches or super-resolution
+approaches similar to iSTAR33.
+Second, numerous methodologies have been developed for
+single-cell diagonal integration. A conventional approach entails
+projecting multimodal data into a shared feature space informed by
+previous knowledge (for example, gene and coding proteins), followed by the application of single-omics analysis techniques66–70. More
+recently, some approaches have incorporated knowledge graphs into
+neural-network frameworks to facilitate more efficient and interpretable integration31. Incorporating such previous biological knowledge
+or knowledge graphs into our framework has the potential to further
+improve its performance.
+Third, while our framework successfully handles paired sections,
+extending to simultaneous integration of multiple adjacent slices
+(more than two) would enable more comprehensive tissue analysis,
+requiring sophisticated multi-slice alignment strategies and expansion of the omics cycle module. In addition, technical improvements
+could further enhance performance. For example, leveraging newer
+developments in deep hypergraph learning could better capture cellular interactions and microenvironmental information.
+The growing importance of spatial multi-omics in understanding
+cellular behaviors and biological processes makes our framework particularly valuable for standard laboratories unable to conduct spatial
+multi-omics experiments directly. By lowering the barrier to spatial
+multi-omics analysis while maintaining high accuracy and robustness, SpatialEx+ can accelerate applications in disease modeling, drug
+discovery and tissue characterization. As spatial omics technologies
+continue to evolve, frameworks such as SpatialEx+ that enable flexible,
+scalable integration will become increasingly crucial for comprehensive tissue analysis.
+
+Online content
+Any methods, additional references, Nature Portfolio reporting summaries, source data, extended data, supplementary information,
+acknowledgements, peer review information; details of author contributions and competing interests; and statements of data and code availability are available at https://doi.org/10.1038/s41592-025-02926-6.
+
+References
+1.
+
+2.
+3.
+
+Rao, A., Barkley, D., França, G. S. & Yanai, I. Exploring tissue
+architecture using spatial transcriptomics. Nature 596, 211–220
+(2021).
+Moffitt, J. R., Lundberg, E. & Heyn, H. The emerging landscape of
+spatial profiling technologies. Nat. Rev. Genet. 23, 741–759 (2022).
+Mund, A., Brunner, A.-D. & Mann, M. Unbiased spatial proteomics
+with single-cell resolution in tissues. Mol. Cell 82, 2335–2349
+(2022).
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+https://doi.org/10.1038/s41592-025-02926-6
+4.
+
+Bressan, D., Battistoni, G. & Hannon, G. J. The dawn of spatial
+omics. Science 381, eabq4964 (2023).
+5. Yayon, N. et al. A spatial human thymus cell atlas mapped to a
+continuous tissue axis. Nature 635, 708–718 (2024).
+6. Xu, Y. et al. A single-cell transcriptome atlas profiles early
+organogenesis in human embryos. Nat. Cell Biol. 25, 604–615
+(2023).
+7. Mo, C.-K. et al. Tumour evolution and microenvironment
+interactions in 2D and 3D space. Nature 634, 1178–1186 (2024).
+8. Lucas, C.-H. G. et al. Spatial genomic, biochemical and cellular
+mechanisms underlying meningioma heterogeneity and
+evolution. Nat. Genet. 56, 1121–1133 (2024).
+9. Greenwald, A. C. et al. Integrative spatial analysis reveals a
+multi-layered organization of glioblastoma. Cell 187, 2485–2501 (2024).
+10. Chen, X. et al. Whole-cortex in situ sequencing reveals
+input-dependent area identity. Nature 647, 203–212 (2025).
+11. Klughammer, J. et al. A multi-modal single-cell and spatial
+expression map of metastatic breast cancer biopsies across
+clinicopathological features. Nat. Med. 30, 3236–3249 (2024).
+12. Liu, Y. et al. High-spatial-resolution multi-omics sequencing via
+deterministic barcoding in tissue. Cell 183, 1665–1681 (2020).
+13. Liu, Y. et al. High-plex protein and whole transcriptome
+co-mapping at cellular resolution with spatial CITE-seq. Nat.
+Biotechnol. 41, 1405–1409 (2023).
+14. Vicari, M. et al. Spatial multimodal analysis of transcriptomes and
+metabolomes in tissues. Nat. Biotechnol. 42, 1046–1050 (2024).
+15. Zhang, D. et al. Spatial epigenome–transcriptome co-profiling of
+mammalian tissues. Nature 616, 113–122 (2023).
+16. Guo, P. et al. Multiplexed spatial mapping of chromatin features,
+transcriptome and proteins in tissues. Nat. Methods 22, 520–529
+(2025).
+17. Vandereyken, K., Sifrim, A., Thienpont, B. & Voet, T. Methods and
+applications for single-cell and spatial multi-omics. Nat. Rev.
+Genet. 24, 494–515 (2023).
+18. Deng, Y., Bai, Z. & Fan, R. Microtechnologies for single-cell and
+spatial multi-omics. Nat. Rev. Bioeng. 1, 769–784 (2023).
+19. Tang, Z. et al. Search and match across spatial omics samples at
+single-cell resolution. Nat. Methods 21, 1818–1829 (2024).
+20. Ekvall, M. et al. Spatial landmark detection and tissue registration
+with deep learning. Nat. Methods 21, 673–679 (2024).
+21. Wahle, P. et al. Multimodal spatiotemporal phenotyping of human
+retinal organoid development. Nat. Biotechnol. 41, 1765–1775
+(2023).
+22. Carstens, J. L. et al. Spatial multiplexing and omics. Nat. Rev.
+Methods Prim. 4, 54 (2024).
+23. Zormpas, E., Queen, R., Comber, A. & Cockell, S. J. Mapping the
+transcriptome: realizing the full potential of spatial data analysis.
+Cell 186, 5677–5689 (2023).
+24. Chen, K. H., Boettiger, A. N., Moffitt, J. R., Wang, S. & Zhuang, X.
+Spatially resolved, highly multiplexed RNA profiling in single
+cells. Science 348, aaa6090 (2015).
+25. Janesick, A. et al. High resolution mapping of the tumor
+microenvironment using integrated single-cell, spatial and in situ
+analysis. Nat. Commun. 14, 8353 (2023).
+26. Bonev, B. et al. Opportunities and challenges of single-cell and
+spatially resolved genomics methods for neuroscience discovery.
+Nat. Neurosci. 27, 2292–2309 (2024).
+27. Piwecka, M., Rajewsky, N. & Rybak-Wolf, A. Single-cell and spatial
+transcriptomics: deciphering brain complexity in health and
+disease. Nat. Rev. Neurol. 19, 346–362 (2023).
+28. Seferbekova, Z., Lomakin, A., Yates, L. R. & Gerstung, M. Spatial
+biology of cancer evolution. Nat. Rev. Genet. 24, 295–313 (2023).
+29. Li, B. et al. Benchmarking spatial and single-cell transcriptomics
+integration methods for transcript distribution prediction and cell
+type deconvolution. Nat. Methods 19, 662–670 (2022).
+384
+
+Article
+30. Argelaguet, R., Cuomo, A. S., Stegle, O. & Marioni, J. C.
+Computational principles and challenges in single-cell data
+integration. Nat. Biotechnol. 39, 1202–1215 (2021).
+31. Cao, Z.-J. & Gao, G. Multi-omics single-cell data integration
+and regulatory inference with graph-linked embedding. Nat.
+Biotechnol. 40, 1458–1466 (2022).
+32. He, B. et al. Integrating spatial gene expression and breast tumour
+morphology via deep learning. Nat. Biomed. Eng. 4, 827–834
+(2020).
+33. Zhang, D. et al. Inferring super-resolution tissue architecture by
+integrating spatial transcriptomics with histology. Nat. Biotechnol.
+42, 1372–1377 (2024).
+34. Wang, C. et al. Benchmarking the translational potential of spatial
+gene expression prediction from histology. Nat. Commun. 16,
+1544 (2025).
+35. Xu, Y. & McCord, R. P. Diagonal integration of multimodal singlecell data: potential pitfalls and paths forward. Nat. Commun. 13,
+3505 (2022).
+36. Chen, S. et al. Integration of spatial and single-cell data across
+modalities with weakly linked features. Nat. Biotechnol. 42,
+1096–1106 (2024).
+37. Samaran, J., Peyré, G. & Cantini, L. scConfluence: single-cell
+diagonal integration with regularized inverse optimal transport on
+weakly connected features. Nat. Commun. 15, 7762 (2024).
+38. Long, Y. et al. Deciphering spatial domains from spatial multiomics with SpatialGlue. Nat. Methods 21, 1658–1667 (2024).
+39. Coleman, K. et al. Resolving tissue complexity by multimodal
+spatial omics modeling with MISO. Nat. Methods 22, 530–538
+(2025).
+40. Varrone, M., Tavernari, D., Santamaria-Martínez, A., Walsh, L. A.
+& Ciriello, G. CellCharter reveals spatial cell niches associated
+with tissue remodeling and cell plasticity. Nat. Genet. 56, 74–84
+(2024).
+41. Singhal, V. et al. BANKSY unifies cell typing and tissue domain
+segmentation for scalable spatial omics data analysis. Nat. Genet.
+56, 431–441 (2024).
+42. Yan, X. et al. Mosaic integration of spatial multi-omics with
+SpaMosaic. Preprint at bioRxiv https://doi.org/10.1101/2024.
+10.02.616189 (2024).
+43. Coleman, K., Schroeder, A. & Li, M. Unlocking the power of spatial
+omics with AI. Nat. Methods 21, 1378–1381 (2024).
+44. Chen, X. et al. HE2Gene: image-to-RNA translation via multi-task
+learning for spatial transcriptomics data. Bioinform. 40, btae343
+(2024).
+45. Stringer, C., Wang, T., Michaelos, M. & Pachitariu, M. Cellpose: a
+generalist algorithm for cellular segmentation. Nat. Methods 18,
+100–106 (2021).
+46. Chen, R. J. et al. Towards a general-purpose foundation model for
+computational pathology. Nat. Med. 30, 850–862 (2024).
+47. Hu, Y. et al. Unsupervised and supervised discovery of tissue
+cellular neighborhoods from cell phenotypes. Nat. Methods 21,
+267–278 (2024).
+48. Ren, H., Walker, B. L., Cang, Z. & Nie, Q. Identifying multicellular
+spatiotemporal organization of cells with SpaceFlow. Nat.
+Commun. 13, 4076 (2022).
+49. Dong, K. & Zhang, S. Deciphering spatial domains from spatially
+resolved transcriptomics with an adaptive graph attention autoencoder. Nat. Commun. 13, 1739 (2022).
+50. Moses, L. & Pachter, L. Museum of spatial transcriptomics. Nat.
+Methods 19, 534–546 (2022).
+51. Wilk, A. J., Shalek, A. K., Holmes, S. & Blish, C. A. Comparative
+analysis of cell–cell communication at single-cell resolution. Nat.
+Biotechnol. 42, 470–483 (2024).
+52. Palla, G., Fischer, D. S., Regev, A. & Theis, F. J. Spatial components
+of molecular tissue biology. Nat. Biotechnol. 40, 308–318 (2022).
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+https://doi.org/10.1038/s41592-025-02926-6
+53. Zeng, Y. et al. Spatial transcriptomics prediction from histology
+jointly through transformer and graph neural networks. Brief.
+Bioinform. 23, bbac297 (2022).
+54. Xie, R. et al. Spatially resolved gene expression prediction from
+histology images via bi-modal contrastive learning. Adv. Neural
+Inf. Process. Syst. 36, 70626–70637 (2024).
+55. Hoang, D.-T. et al. A deep-learning framework to predict
+cancer treatment response from histopathology images
+through imputed transcriptomics. Nat. Cancer 5, 1305–1317
+(2024).
+56. Jia, Y., Liu, J., Chen, L., Zhao, T. & Wang, Y. THItoGene: a deep
+learning method for predicting spatial transcriptomics from
+histological images. Brief. Bioinform. 25, bbad464 (2024).
+57. Qing, J. et al. Suppression of anchorage-independent growth
+and matrigel invasion and delayed tumor formation by elevated
+expression of fibulin-1D in human fibrosarcoma-derived cell lines.
+Oncogene 15, 2159–2168 (1997).
+58. Twal, W. O. et al. Fibulin-1 suppression of fibronectinregulated cell adhesion and motility. J. Cell Sci. 114,
+4587–4598 (2001).
+59. Pupa, S. M. et al. Regulation of breast cancer response to
+chemotherapy by fibulin-1. Cancer Res 67, 4271–4277
+(2007).
+60. Kelemen, L. E. et al. Genetic variation in stromal proteins decorin
+and lumican with breast cancer: investigations in two casecontrol studies. Breast Cancer Res. 10, R98 (2008).
+61. Yu, B. et al. TAC1, a major quantitative trait locus controlling tiller
+angle in rice. Plant J. 52, 891–898 (2007).
+62. Lee, E. H. et al. Association analysis of RGS7BP gene
+polymorphisms with aspirin intolerance in asthmatic patients.
+Ann. Allergy Asthma Immunol. 106, 292–300 (2011).
+63. Wang, B. et al. A block in both early T lymphocyte and natural
+killer cell development in transgenic mice with high-copy
+numbers of the human CD3E gene. Proc. Natl Acad. Sci. USA 91,
+9402–9406 (1994).
+64. Luo, M.-L. et al. Amplification and overexpression of CTTN (EMS1)
+contribute to the metastasis of esophageal squamous cell
+carcinoma by promoting cell migration and anoikis resistance.
+Cancer Res. 66, 11690–11699 (2006).
+65. Lin, S. et al. Streamlining spatial omics data analysis with Pysodb.
+Nat. Protoc. 19, 831–895 (2024).
+66. Stuart, T. et al. Comprehensive integration of single-cell data. Cell
+177, 1888–1902 (2019).
+67. Gao, C. et al. Iterative single-cell multi-omic integration using
+online learning. Nat. Biotechnol. 39, 1000–1007 (2021).
+68. Welch, J. D. et al. Single-cell multi-omic integration compares
+and contrasts features of brain cell identity. Cell 177, 1873–1887
+(2019).
+69. Korsunsky, I. et al. Fast, sensitive and accurate integration of
+single-cell data with Harmony. Nat. Methods 16, 1289–1296 (2019).
+70. Chen, H. et al. Assessment of computational methods for the
+analysis of single-cell ATAC-seq data. Genome Biol. 20, 1–25
+(2019).
+Publisher’s note Springer Nature remains neutral with regard to
+jurisdictional claims in published maps and institutional affiliations.
+Springer Nature or its licensor (e.g. a society or other partner) holds
+exclusive rights to this article under a publishing agreement with
+the author(s) or other rightsholder(s); author self-archiving of the
+accepted manuscript version of this article is solely governed by the
+terms of such publishing agreement and applicable law.
+© The Author(s), under exclusive licence to Springer Nature America,
+Inc. 2025
+385
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Key Laboratory of Symbolic Computation and Knowledge Engineering of the Ministry of Education, College of Computer Science and Technology,
+Jilin University, Changchun, China. 2Center for Medical Research and Innovation, Shanghai Pudong Hospital, Fudan University Pudong Medical Center,
+Institute of Science and Technology for Brain-Inspired Intelligence, MOE Key Laboratory of Computational Neuroscience and Brain-Inspired Intelligence,
+Center for Integrative Spatial-Omics Research, Fudan University, Shanghai, China. 3Center for Medical Research and Innovation, Shanghai Pudong
+Hospital, Fudan University Pudong Medical Center, Fudan University, Shanghai, China. 4Biomedicine Discovery Institute and Department of Biochemistry
+and Molecular Biology, Monash University, Melbourne, Victoria, Australia. 5Department of Computer Science and Technology, College of Mathematics
+and Computer, Shantou University, Shantou, China. 6National Clinical Research Center for Laboratory Medicine, Department of Laboratory Medicine,
+The First Hospital of China Medical University, Shenyang, China. 7Center of Intelligent Medicine, School of Control Science and Engineering, Shandong
+University, Jinan, China. 8Fudan University Shanghai Cancer Center, Department of Oncology, Shanghai Medical College, The Human Phenome Institute,
+Zhangjiang-Fudan International Innovation Center, Fudan University, Shanghai, China. 9These authors contributed equally: Yonghao Liu, Chuyao Wang,
+Zhikang Wang.
+e-mail: fengxy@jlu.edu.cn; guanrenchu@jlu.edu.cn; zhiyuan@fudan.edu.cn
+1
+
+Nature Methods | Volume 23 | February 2026 | 373–386
+
+386
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Methods
+
+(𝓁𝓁𝓁
+
+The proposed method comprises three components—H&E foundation
+model, hypergraph encoder and omics cycle module—with the first
+two forming SpatialEx and all three together constituting SpatialEx+.
+Briefly, the H&E foundation model is responsible for capturing cellular
+morphology features from H&E images and embedding the biologically
+meaningful knowledge in the feature space. The hypergraph encoder
+enhances cellular representations by incorporating spatial contextual
+information, and further refines these representations by integrating
+global tissue context through contrastive learning. The omics cycle
+module facilitates the mapping of omics–omics correlations, enabling
+flexible omics transition between different omics modalities. The
+subsequent subsections provide a detailed exposition of each module.
+
+H&E foundation model
+Given a histology image X ∈ ℝh×w×3, our objective is to encode informative morphology features of each individual cell into the feature space.
+To achieve this, we cropped square patches centered on each cell with
+a predefined radius r; the set of patches can be denoted as
+P ∈ 𝒱p1 , p2 , … , pN } with each patch pi ∈ ℝr×r×3 and N representing the
+total patch number. Subsequently, these patches were processed
+through a pretrained encoder to obtain the cellular d-dimensional
+cellular representations. In this computational process, the generalpurpose self-supervised pathology foundation model UNI46 is chosen
+given its exceptional feature extraction capability across a wide range
+of pathology tasks. Notably, incorporating other advanced histology
+image foundation models, such as CONCH71, Phikon72 and Gigapath73,
+could also yield competitive feature representation, as demonstrated
+in Extended Data Fig. 10a. After the histology feature extraction, the
+cells are transformed from their original image space into the highdimensional feature space, enabling efficient computation even with
+a mass of cells.
+
+Hypergraph encoder
+To fully exploit spatial contextual information in terms of complex and
+higher-order cellular interactions, we incorporated a hypergraph
+structure into the computational framework. Specifically, a hypergraph
+can be defined as 𝒢𝒢 𝒱 𝒱𝒱𝒱, ℰ}, where 𝒱𝒱 𝒱 𝒱v1 , v2 , ⋯ , vN } represents the set
+of nodes characterized by the extracted histology features and
+ℰ 𝒱 𝒱e1 , e2 , ⋯ , eM } denotes the set of hyperedges derived from the spatial
+contextual relationships. Each hyperedge ej is a nonempty subset of
+nodes, that is, ∅ ≠ e j ⊆𝒱𝒱 . The hypergraph structure is mathematically
+formulated using an incidence matrix A ∈ ℝN×M and a diagonal weight
+matrix W ∈ ℝM×M. The elements in A and W indicate the node-hyperedge
+relationship as well as the corresponding hyperedge weights. In this
+study, we first identified k spatially neighboring cells for each cell and
+grouped them together to form a hyperedge. This construction process
+ensures each hyperedge contains multiple cells and each cell participates in multiple hyperedges. As a result, this hypergraph-based representation effectively models high-order interactions, facilitating
+more expressive and context-aware feature learning in the
+subsequent computation.
+Following the hypergraph construction, we leveraged the hypergraph neural networks (HGNNs)74,75 for computation. Methodologically, we applied a two-stage message-passing mechanism76,77, which
+involves node-to-hyperedge (cell-to-microenvironment) and hyperedge-to-node (microenvironment-to-cell) aggregation. Specifically, in
+the first stage, each hyperedge representation is iteratively updated by
+aggregating the features of its constituent nodes. In the second stage,
+each node feature is refined by aggregating the updated hyperedge
+representations. The whole computation process can be formally
+expressed as follows:
+(𝓁𝓁𝓁
+
+(𝓁𝓁𝓁1)
+
+Hℰ 𝒱 σ(D−1
+A H𝒱𝒱
+ℰ
+
+Nature Methods
+
+(𝓁𝓁𝓁
+
+Θℰ ),
+
+(1)
+
+(𝓁𝓁𝓁1)
+
+H𝒱𝒱 𝒱 σ(D−1
+AWHℰ
+𝒱𝒱
+
+(𝓁𝓁𝓁
+
+Θ𝒱𝒱 ),
+
+(2)
+
+(𝓁𝓁𝓁
+where H(𝓁𝓁𝓁
+∈ ℝM×d and H𝒱𝒱 ∈ ℝN×d indicate the hyperedge and node
+ℰ
+representations, respectively, σ (⋅) is the rectified linear unit (ReLU)
+′
+′
+′
+(𝓁𝓁𝓁
+function78 and Θ(𝓁𝓁𝓁
+∈ ℝd×d and ϴ𝒱𝒱 ∈ ℝd ×d are the layer-specific trainℰ
+M×M
+N×N
+able weights. Dℰ ∈ ℝ
+and D𝒱𝒱 ∈ ℝ represent the hyperedge diagonal degree matrix and the node diagonal degree matrix, respectively,
+where Dℰ, j 𝒱 ∑vi ∈e j Ai, j and D𝒱𝒱, j 𝒱 ∑ei ∈ℰ w j Ai, j .
+After obtaining the encoded cellular representations, we map
+them to the gene expression space using a MLP decoder. Specifically,
+the decoder follows a two-layer linear architecture with 512 hidden
+units, incorporating batch normalization and the ReLU activation
+function, that is, linear → ReLU → batch normalization → linear.
+Contrastive learning is known for enhancing representation learning across various classification and regression tasks79,80. Here, we used
+contrastive learning to refine the omics-related features by encoding
+the global tissue context. Formally, a corrupted hypergraph is first
+created as 𝒢𝒢 ′ 𝒱 𝒱𝒱𝒱 ′ , ℰ}, where 𝒱𝒱 ′ represents a set of nodes with shuffled
+features and ℰ is the original unchanged hyperedges. This corrupted
+hypergraph is then fed into the HGNN encoder, producing the corrupted representations H′𝒱𝒱 . The message-passing mechanism used for
+this computation follows the formulation described in equations (1)
+and (2). Referring the local-global contrastive framework of Deep Graph
+Infomax81, we generated the global context representation s using an
+average readout operation χ(⋅), and maximized the mutual information
+between the local representation of each cell and its global context.
+Unlike conventional contrastive learning methods that explicitly compute loss using positive and negative sample pairs, this strategy instead
+associates all node embeddings—both from the original and corrupted
+graphs—with a single global summary vector, reducing the computational complexity from O(N2) to O(N). Moreover, in contrast to the
+standard Deep Graph Infomax model, we opted not train a separate
+discriminator to assess the global information contained in the local
+representations and instead used a nonparametric cosine similarity
+objective function. In all, the global summary vector and the contrastive loss can be formulated as follows:
+′
+
+′
+
+s 𝒱 χ(H𝒱𝒱 ) 𝒱
+
+ℒcl 𝒱 {
+
+N
+
+1
+∑H ,
+N i=1 i
+
+1 − cos(H𝒱𝒱 , s), if 𝒱𝒱 ∈ G
+max(0, cos(H𝒱𝒱 ′ , s)), if 𝒱𝒱 ′ ∈ G′
+
+(3)
+
+(4)
+
+Omics cycle module
+The histology feature extractor, hypergraph representation learning
+and contrastive learning jointly enable SpatialEx to translate histology to spatial omics at single-cell resolution. Building on this foundation, SpatialEx+, an extension of SpatialEx with omics cycle modules,
+integrates the prediction of two distinct omics into a collaborative
+training framework, ensuring diagonal integration of multi-omics
+analysis. Specifically, each omics cycle module follows an identical
+structure to the MLP decoder in SpatialEx, consisting of a sequence
+of computations: linear → ReLU → batch normalization → linear. It
+takes one type of omics data as input and translates it to another. The
+input omics data can either be experimentally measured or predicted
+from SpatialEx, enabling flexible and scalable integration. As shown
+in Fig. 1f, SpatialEx+ comprises omics cycle module 1 (OC1) and omics
+cycle module 2 (OC2). The details for module training can be found in
+Extended Data Fig. 1 and Methods (‘Model optimization’ section). We
+further conducted hyperparameter sensitivity experiments on the
+image encoder, patch radius and the number of spatially neighboring
+cells, as shown in Extended Data Fig. 10b–d.
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Model optimization
+
+SpatialEx. The reconstruction loss ( ℒmse) and contrastive loss ( ℒcl) are
+jointly used to optimize SpatialEx. In terms of the first one, it aims to
+align the predicted omics expression profiles and the measured ones
+by minimizing the mean square errors as follows:
+ℒmse 𝒱
+
+I
+
+J
+
+1
+2
+∑ ∑ ||Yij − SpatialEx(X )ij || ,
+IJ i j
+
+(5)
+
+where i is the index for the I dataset-specific cells or spots and j is the
+index for the J genes. Y is the measured omics data. The overall loss
+function for SpatialEx is shown as follows:
+ℒSpatialEx 𝒱 ℒmse + ℒcl .
+
+(6)
+
+SpatialEx+. For optimizing SpatialEx+, we in total introduced four sets
+of loss functions, comprising two sets for the two SpatialEx networks
+and two sets for the two omics cycle modules. Here, we indicate the two
+SpatialEx networks as SpatialEx1 and SpatialEx2 and two omics cycle
+modules as OC1 and OC2. Taking the OC1 as an example, its optimization process involves
+ℒOC1 𝒱 ℒmse (SpatialEx2 (X1 ), OC1 (Y1 )) + ℒmse (Y2 , OC1 (SpatialEx1 (X2 ))). (7)
+
+images with spatial transcriptomics data. Following this integration,
+each cell was characterized by a comprehensive molecular profile,
+incorporating both gene expression and protein expression values.
+Considering the small proteomics panel size, we only applied scanpy.
+pp.scale for data preprocessing. We then followed the 10x Genomics
+tutorial (https://www.10xgenomics.com/support/software/xeniumonboard-analysis/latest/analysis/xoa-output-understanding-outputs)
+to align the H&E image pixels to the sequenced physical locations using
+Xenium Explorer.
+Spatial transcriptomics–metabolomics mouse brain data. The spatial
+multimodal analysis workflow enables spatial multi-omics profiling in a
+single tissue section; however, the measured omics data reside on distinct
+coordinate systems and exhibit differing resolutions. We followed the
+multi-omics alignment procedures in NicheTrans to generate the fully
+aligned spatial multi-omics data. The input transcriptomic panel is defined
+as the intersection of the top 1,000 spatially variable genes across the three
+slices, while the metabolite panel consists of the intersection of the top 50
+spatially variable metabolites shared among them. We first perform log
+transformation for gene expression data, while leaving the metabolomic
+expression data unchanged. Afterward, we scale the two types of omics
+data uniformly to the range of 0–1 using max–min normalization.
+
+Implementation details
+In all, the total loss for SpatialEx+ can be formulated as follows:
+ℒSpatialEx+ 𝒱 ℒSpatialEx1 + ℒSpatialEx2 + ℒOC1 + ℒOC2 .
+
+(8)
+
+Statistics and reproducibility
+Cells and genes were filtered based on quality-control thresholds and
+Moran’s I statistics (‘Data preprocessing’ section). No statistical method
+was used to predetermine sample size. No data were excluded from the
+analyses. Randomization was achieved by setting random seeds. The
+investigators were not blinded to allocation during experiments and
+outcome assessment.
+
+Data preprocessing
+In processing H&E images, one critical step is locating each individual
+cell for subsequent feature extraction. For the data labeled with cell
+boundaries, for example, Xenium, we directly used the provided information to locate cells in images. In terms of the tissues using other techniques (not providing cell boundaries) and exceeding the sequencing
+area, we applied Cellpose45 to identify the cellular position.
+Xenium in situ human and mouse data. We used two Xenium breast
+cancer datasets for experiments, including the spatial transcriptomics–proteomics Human Breast Cancer dataset and spatial transcriptomics human breast dataset using the entire sample area. Both
+datasets comprise two consecutive Xenium slices with panel sizes
+of 313 genes and 280 genes, respectively. Furthermore, in the first
+dataset, slice 1 includes a paired immunofluorescence image with
+markers for HER2 and CD20 proteins. Moreover, we also used Xenium
+datasets comprising human colon, mouse colon and human skin tissues, each consisting of a single tissue section. The panel sizes for
+these datasets are 325, 379 and 282, respectively. For these datasets,
+we used identical preprocessing operations for gene expressions,
+following the Squidpy tutorial (https://squidpy.readthedocs.io/en/
+stable/notebooks/tutorials/tutorial_xenium.html). Specifically, we
+first filtered out cells with fewer than ten detected gene expression
+counts, and then used scanpy.pp.normalize_total to normalize the total
+gene expression across all cells. Afterward, we applied scanpy.pp.log1p
+for log transformation. For the immunofluorescence data, we followed NicheTrans82 for image registration and protein quantification.
+This process enables the precise alignment of immunofluorescence
+Nature Methods
+
+For hypergraph construction, we set k as 7, identifying the 7 nearest
+cells along with the center cell to construct the hyperedges. In addition,
+all edge weights in the hypergraph are set to 1, that is, W is an identity
+matrix. We used a two-layer (that is, 𝓁𝓁 𝒱 2) HGNN to obtain cell representations. We trained the model using the Adam83 optimizer with a
+learning rate of 0.001, and set the number of training epochs to 500.
+Note that the well-trained H&E foundation model is fixed for feature
+extraction and will not be updated during the training process. All
+experiments were conducted on 1 24-GB Nvidia GeForce RTX 3090,
+using PyTorch v.2.3.1 and the Python v.3.8 environment.
+SOView visualization. We conducted joint spatial domain identification on two slices using the aligned gene expression using CellCharter.
+Specifically, the process begins by applying scVI84 for dimensionality
+reduction to obtain a low-dimensional representation. Next, it aggregates representations from varying numbers of neighboring cells based
+on their spatial locations, and concatenates them to create spatially
+aware embeddings for each cell. These embeddings are then input
+into a Gaussian mixture model for clustering. To visualize the spatially
+aware embeddings, we used SOView65. The first three components of
+the uniform manifold approximation and projection embeddings are
+rescaled to the range 0–255, forming a red, green and blue color matrix.
+A color plot is then generated based on this red, green, blue color
+matrix and the spatial location matrix. In this way, the color similarities between spots reflect the similarities in gene expression, allowing
+tissue heterogeneity to be visualized in a single plot.
+Cell-type transferring. We jointly performed principal component
+analysis on the measured gene expressions of slice 1 and the predicted
+gene expression of slice 2, extracting 50 principal components. Afterward, the data of slice 1 were used to optimize the MLP classifier, with
+the principal components serving as inputs and cell-type annotations
+as targets. Here, the MLP classifier is constructed by three linear layers, where the first two layers are followed by a LeakyReLU activation
+function and the last layer followed by a Softmax function. Considering
+the inherent long-tail distribution of different cell types, focal loss85
+was used to optimize the MLP classifier. Additionally, cell types with
+limited samples were augmented by adding Gaussian noise, maintaining balanced class distribution in each batch. The model parameters
+were updated using the Adam optimizer with a learning rate of 0.001
+and no weight decay.
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+To thoroughly evaluate transferability, we performed tenfold
+cross-validation on slice 1. In each fold, nine parts were used for training
+and the remaining part for validation. The best-performing model on
+the validation set was then tested on slice 2.
+GO enrichment analysis. We first used the scanpy.tl.rank_genes_
+groups() function from Scanpy to rank gene importance within each
+spatial domain. Genes with a log fold change >1.5 were selected as
+marker genes for each spatial domain. These marker genes were then
+converted to gene IDs and subjected to GO functional enrichment using
+the enrichGO function from the R package clusterProfiler. Multiple
+testing correction was performed using the Benjamini–Hochberg
+false discovery rate method (pAdjustMethod = ‘fdr’), with P value and
+Q value thresholds of 0.05 and 0.2, respectively.
+
+SPCC is used to assess the monotonic relationship between two
+variables. In our study, SPCC is calculated between the Moran’s I values
+of predicted and measured gene expression to evaluate how well spatial
+autocorrelation is preserved. It is defined as:
+n
+
+SPCC(x, y) 𝒱 1 −
+
+6∑i=1 d2i
+
+n(n2 − 1)
+
+,
+
+(13)
+
+where d2i is the difference between the ranks of gene i in the predicted
+and measured Moran’s I lists, and n is the total number of genes.
+
+Reporting summary
+Further information on research design is available in the Nature
+Portfolio Reporting Summary linked to this article.
+
+Evaluation
+
+Data availability
+
+In this study, three evaluation metrics, including PCC, CMD and the
+SSIM, Moran’s I and Spearman’s rank correlation coefficient (SPCC)
+were used for quantitatively assessing the model’s performance.
+PCC serves to quantify the linear correlation between two variables, and its definition is shown as follows:
+
+The datasets used in this study are publicly accessible, with detailed statistical information summarized in Supplementary Table 1. The Xenium
+Human Breast Cancer tissue dataset is available via 10x Genomics at
+https://www.10xgenomics.com/products/xenium-in-situ/humanbreast-dataset-explorer. The Xenium Human Colon tissue dataset is
+available via 10x Genomics at https://www.10xgenomics.com/datasets/
+human-colon-preview-data-xenium-human-colon-gene-expressionpanel-1-standard. The Xenium Mouse Colon tissue dataset is available via 10x Genomics at https://www.10xgenomics.com/cn/datasets/
+fresh-frozen-mouse-colon-with-xenium-multimodal-cell-segmentation-1-standard. The Xenium Human Skin tissue is available via 10x
+Genomics at https://www.10xgenomics.com/cn/datasets/human-skinpreview-data-xenium-human-skin-gene-expression-panel-1-standard.
+The Xenium Human Breast Using the Entire Sample Area dataset is
+publicly available via 10x Genomics at https://www.10xgenomics.com/
+datasets/ffpe-human-breast-using-the-entire-sample-area-1-standard.
+The Visium Spatial Multimodal Analysis dataset is available via Mendeley at https://data.mendeley.com/datasets/w7nw4km7xd/1. Source
+data are provided with this paper, and are available at Zenodo via
+https://doi.org/10.5281/zenodo.17191222 (ref. 86).
+
+n
+
+PCC (x, y) 𝒱
+
+∑1 (xi − x)̄ (yi − y)̄
+2
+2
+n
+n
+√∑1 (xi − x)̄ √∑1 (yi − y)̄
+
+,
+
+(9)
+
+where xi represents the expression of gene i. x̄ and y ̄ denote the mean
+values of x and y.
+CMD is a general measurement of the difference between two correlation matrices R1 and R2. A lower CMD value indicates better results.
+CMD can be formulated as follows:
+d(R1 , R2 ) 𝒱 1 −
+
+trace(R1 × R2 )
+,
+||R1 ||F ||R2 ||F
+
+(10)
+
+where trace(.) calculates the trace of the matrix, and || ⋅ ||F represents
+the Frobenius norm of the matrix.
+SSIM is used to evaluate the similarity between the ground truth
+and the predicted spatial structure of gene expression, with higher values indicating greater similarity. In this study, we used SSIM to evaluate
+the structural similarity of hypergraph formed by spatial information
+of cells. Specifically, it can be formulated as follows:
+1
+
+SSIM (x, y) 𝒱
+
+2
++ c2 ) (vxy + c3 )
+(2μx μy + c1 ) (2vxy
+1
+
+2
++ c3 )
+(μ2x + μ2y + c1 ) (vx + vy + c2 ) (vxy
+
+n
+
+(11)
+
+n
+
+i=1
+
+(12)
+
+i
+
+where xi is the expression level at location i, x̄ is the mean expression
+across all locations, ωij is the spatial weight between locations i and j,
+n is the number of spatial units and Ω 𝒱 ∑i, j ωij is the sum of all
+spatial weights.
+Nature Methods
+
+Our code is available via GitHub at https://github.com/KEAML-JLU/
+SpatialEx. The implementations of Spatial and SpatialEx+ as well as
+tutorials are available at https://spatialex-tutorials.readthedocs.io/
+en/latest.
+
+References
+
+,
+
+where x and y denote measured and predicted gene expression, res­
+pectively. The μx and μy represent the spatially Gaussian-filtered
+gene expression of x and y. Correspondingly, vx and vy indicate the
+spatially Gaussian-filtered variance of x and y, while vxy is the spatially
+Gaussian-filtered covariance between x and y. The c1, and c2 are predefi­
+2
+2
+ned constant,c1 𝒱 (0.01(max(x) 2− min(x))) , c2 𝒱 (0.03(max(x) − min(x)))
+0.03
+and c3 𝒱 ( √ (max(x) − min(x))) .
+2
+Moran’s I is a measure of spatial autocorrelation, reflecting the
+degree to which similar values cluster in space. It is defined as:
+∑i=1 ∑j=1 ωij (xi − x)̄ (x j − x)̄
+n
+I𝒱
+×
+,
+n
+2
+Ω
+∑ (x − x)̄
+
+Code availability
+
+71. Lu, M. Y. et al. A visual-language foundation model for
+computational pathology. Nat. Med. 30, 863–874 (2024).
+72. Filiot, A. et al. Scaling self-supervised learning for histopathology
+with masked image modeling. Preprint at medRxiv https://doi.org/
+10.1101/2023.07.21.23292757 (2023).
+73. Xu, H. et al. A whole-slide foundation model for digital pathology
+from real-world data. Nature 630, 181–188 (2024).
+74. Antelmi, A. et al. A survey on hypergraph representation learning.
+ACM Comput. Surv. 56, 24 (2023).
+75. Kim, S. et al. A survey on hypergraph neural networks: an in-depth
+and step-by-step guide. In Proc. 30th ACM SIGKDD Conference on
+Knowledge Discovery and Data Mining 6534–6544 (ACM, 2024).
+76. Feng, Y., You, H., Zhang, Z., Ji, R. & Gao, Y. Hypergraph neural
+networks. In Proc. AAAI Conference on Artificial Intelligence Vol.
+33, 3558–3565 (AAAI, 2019).
+77. Gao, Y., Feng, Y., Ji, S. & Ji, R. HGNN+: general hypergraph neural
+networks. IEEE Trans. Pattern Anal. Mach. Intell. 45, 3181–3199
+(2022).
+78. Nair, V. & Hinton, G. E. Rectified linear units improve restricted
+Boltzmann machines. In Proc. 27th International Conference on
+Machine Learning 807–814 (PMLR, 2010).
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+79. He, K., Fan, H., Wu, Y., Xie, S. & Girshick, R. Momentum contrast
+for unsupervised visual representation learning. In Proc. IEEE/
+CVF Conference on Computer Vision and Pattern Recognition
+9729–9738 (IEEE, 2020).
+80. Chen, T., Kornblith, S., Norouzi, M. & Hinton, G. A simple
+framework for contrastive learning of visual representations. In
+Proc. International Conference on Machine Learning 1597–1607
+(PMLR, 2020).
+81. Velickovic, P. et al. Deep graph infomax. In Proc. International
+Conference on Learning Representation 1–17 (2019).
+82. Wang, Z. et al. NicheTrans: spatial-aware cross-omics translation.
+Preprint at bioRxiv https://doi.org/10.1101/2024.12.05.626986 (2024).
+83. Kingma, D. P. & Ba, J. Adam: a method for stochastic optimization.
+In Proc. International Conference on Learning Representations 1–15
+(2015).
+84. Lopez, R., Regier, J., Cole, M. B., Jordan, M. I. & Yosef, N. Deep
+generative modeling for single-cell transcriptomics. Nat. Methods
+15, 1053–1058 (2018).
+85. Lin, T.-Y., Goyal, P., Girshick, R. B., He, K. & Dollár, P. Focal loss for
+dense object detection. In Proc. IEEE International Conference on
+Computer Vision 2999–3007 (IEEE, 2017).
+86. Wang, C. Source data for the paper ‘High-Parameter Spatial MultiOmics through Histology-Anchored Integration’. Zenodo
+https://doi.org/10.5281/zenodo.17191222 (2025).
+
+(B.-Z.Q.)) and Fund of Fudan University and Cao’ejiang Basic Research
+(grant no. 24FCA10 (Z.Y.)).
+
+Acknowledgements
+
+Correspondence and requests for materials should be addressed to
+Xiaoyue Feng, Renchu Guan or Zhiyuan Yuan.
+
+Our work is supported by National Key R&D Program of China (grant
+no. 2023YFF1204800 (Z.Y.)), National Natural Science Foundation of
+China (grant nos. 32470706 (Z.Y.), 62303119 (Z.Y.), 62172187 (R. Guan)
+and 62372209 (X.F.)), the Computational Biology Program (grant
+no. 25JS2850200 (Z.Y.)) of Science and Technology Commission of
+Shanghai Municipality (STCSM), Chenguang Program of Shanghai
+Education Development Foundation and Shanghai Municipal
+Education Commission (grant no. 22CGA02 (Z.Y.)), Shanghai Municipal
+Science and Technology Major Project (grant no. 2023SHZDZX02
+
+Nature Methods
+
+Author contributions
+
+Z.Y., X.F. and R. Guan conceived of and supervised the study,
+secured the funding and provided the analytical guidance. Y.L.
+implemented the algorithm with assistance from C.W. and Z.W. C.W.
+performed the main analyses with support from Y.L. and Z.W. C.W.
+generated the figures with input from Z.W. and L.C. Z.L. conducted
+the tissue annotation. J.S., B.-Z.Q., Q.Z. and R. Gao provided valuable
+suggestions on model design. Z.Y., X.F., R. Guan, Y.L. and Z.W. wrote
+the paper with the input from all authors. All authors reviewed and
+approved the final version of the paper.
+
+Competing interests
+
+The authors declare no competing interests.
+
+Additional information
+
+Extended data is available for this paper at
+https://doi.org/10.1038/s41592-025-02926-6.
+Supplementary information The online version contains
+supplementary material available at
+https://doi.org/10.1038/s41592-025-02926-6.
+
+Peer review information Nature Methods thanks Christoph Kuppe,
+Wenwen Min and James Nagai for their contribution to the peer review
+of this work. Primary Handling Editor: Madhura Mukhopadhyay, in
+collaboration with the Nature Methods team.
+Reprints and permissions information is available at
+www.nature.com/reprints.
+
+Article
+
+Extended Data Fig. 1 | Detailed training procedure of SpatialEx+ . In SpatialEx+
+framework, slice 1 is provided as input to SpatialEx 2, generating the predicted
+omics 2 Y2̂ , while simultaneously being supplied to SpatialEx 1 for loss
+computation. Similarly, slice 2 is supplied to SpatialEx 1 to produce the predicted
+omics 1 Ŷ 1, and concurrently used as input to SpatialEx 2 for loss computation.
+Each omics cycle is optimized using its corresponding loss function, ℒOC1 and
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+ℒOC2. For omics cycle 1, as indicated by the solid lines, the measured omics 1 Y1 is
+paired with the predicted omics 2 Ŷ 2 to compute the first term of ℒOC1.
+As indicated by the dashed lines, the predicted omics 1 Ŷ 1 is paired with
+the measured omics 2 Y2 to compute the second term of ℒOC1. Omics
+cycle 2 follows the same procedure in a symmetric manner.
+
+Article
+
+Extended Data Fig. 2 | See next page for caption.
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Article
+Extended Data Fig. 2 | Quantitative comparison of SpatialEx with other
+single-cell resolution baseline methods on H&E-to-omics task. A. Quantitative
+comparison between SpatialEx and CNN_Reg on the Human_Breast_Cancer
+dataset. The first row shows results when training on Slice 1 and evaluating
+on Slice 2, while the second row shows results when training on Slice 2 and
+evaluating on Slice 1. Each dot in the PCC and SSIM scatter plots represents
+the metric computed for a single gene, with higher values indicating better
+performance (n = 313 genes). The gene-by-gene CMD values are summarized as
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+bar plots, where lower values indicate higher similarity between predicted and
+measured expression patterns. B. PCC comparison of gene expression prediction
+across diverse tissues. The three datasets (hColon_Non_diseased, hSkin_
+Melanoma and mouse_Colon) were manually split into two non-overlapping
+slices: training was performed on the first slice and testing on the second (Left),
+and vice versa (Right). In each scatter plot, dot represents the PCC between the
+predicted and measured expression levels of a single gene; higher values indicate
+better performance.
+
+Article
+
+Extended Data Fig. 3 | See next page for caption.
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Article
+Extended Data Fig. 3 | Comprehensive comparison across all baseline methods
+on H&E-to-omics task. A. The Box plot shows the performance of SpatialEx,
+CNN_Reg, DeepPT, Hist2ST, and THItoGene on various datasets. Each box
+represents the distribution of PCCs between the predicted and measured gene
+expression across genes for each method. Each dot in scatter plot represents
+a single gene. One-tailed Wilcoxon rank-sum test was used for pairwise
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+comparison; sample size (n) is shown below the corresponding subplot. In the
+boxplot, the center line, box limits and whiskers denote the median, upper and
+lower quartiles and 1.5× interquartile range, respectively. B. Gene expression
+visualizations from different baseline methods across four tissue datasets,
+compared with the measured ground truth. (Scale bars in B: 500 um).
+
+Article
+
+Extended Data Fig. 4 | Comparison of SpatialEx and DeepPT on the
+Human_Breast_Cancer dataset under the setting where Slice 2 is used for
+training and Slice 1 for prediction. Left: Measured. Center: DeepPT predicted.
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Right: SpatialEx predicted. The region enclosed by the red box represents the
+sequencing area, whereas the surrounding outer region contains only H&E
+images. (Scale bars: 1 mm).
+
+Article
+
+Extended Data Fig. 5 | See next page for caption.
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Article
+Extended Data Fig. 5 | Spatial domain identification comparisons across
+three single-cell resolution methods. A. Line plots of NMI scores across
+different spatial resolutions. Spatial domain identification was performed
+using CellCharter based on measured or predicted gene expression (SpatialEx,
+DeepPT, and CNN_Reg). Domains generated from measured expression were
+used as ground truth to quantify each method using NMI. Across all experimental
+settings and spatial resolutions, SpatialEx consistently produced spatial domains
+most similar to those derived from measured expression, outperforming DeepPT
+and CNN_Reg. B. Domain identification results on the hColon_Non_diseased
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+dataset at a resolution of 11 spatial domains, using CellCharter based on
+measured gene expression and predictions from SpatialEx, DeepPT, and CNN_
+Reg. C. Domain identification results on the mouse_Colon dataset at a resolution
+of 11 spatial domains, using CellCharter based on measured gene expression and
+predictions from SpatialEx, DeepPT, and CNN_Reg. D. Domain identification
+results on the hSkin_Melanoma dataset at a resolution of 11 spatial domains, using
+CellCharter based on measured gene expression and predictions from SpatialEx,
+DeepPT, and CNN_Reg. (Scale bars in B, C and D: 500 um).
+
+Article
+
+Extended Data Fig. 6 | See next page for caption.
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Article
+Extended Data Fig. 6 | Quantitative and qualitative comparison between
+SpatialEx and DeepPT for cell type classification. A. ROC curves and AUC values
+for cell type classification using gene expression predicted by SpatialEx and
+DeepPT. For clarity, the curves are organized into three panels according to the
+number of cells of each cell type. Different colors are used to represent distinct
+cell types, with solid and dashed lines corresponding to SpatialEx and DeepPT,
+respectively. The AUC values for each cell type are provided in legends. B. Cell
+type classification on the Human_Breast_Cancer Slice 2 dataset using DeepPTpredicted expression. Left: annotations; Right: using DeepPT predicted gene
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+expression. C. Spatial distribution of myoepithelial subtypes and their marker
+gene expression within the ROI. Top row, from left to right: Spatial distribution of
+ACTA2+ Myoepi. in annotation. The transferred cell type using DeepPT predicted
+gene expression. Measured spatial distribution of the marker genes ACTA2.
+DeepPT predicted spatial distribution of the marker genes ACTA2. Second row,
+from left to right: Spatial distribution of KRT15+ Myoepi. in annotation. The
+transferred cell type using DeepPT predicted gene expression. Measured spatial
+distribution of the marker genes KRT15. DeepPT predicted spatial distribution of
+the marker genes KRT15. (Scale bars in B: 1 mm, C: 250 um).
+
+Article
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Extended Data Fig. 7 | Visualization of gene expression on the Human_Breast_IDC_Big dataset. The left three columns show the spatial expression of Panel B on Slice
+1. From left to right: measured expression, the expression predicted by SpatialEx+ and DeepPT. The right three columns show the spatial expression of Panel A on Slice
+2, arranged in the same order.
+
+Nature Methods
+
+Article
+
+Extended Data Fig. 8 | See next page for caption.
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+Article
+Extended Data Fig. 8 | Omics integration. A. Quantitative evaluation of
+SpatialEx+ predicted gene expression on the Human_Breast_Cancer spatial
+transcriptome-proteome dataset. From left to right: PCC, SSIM, and CMD. In
+PCC and SSIM plots, each teal point represents an individual gene, and the
+black points indicate mean values across all genes. B. Quantitative evaluation
+of SpatialEx+ gene expression predictions on the mouse brain spatial
+transcriptome-metabolome dataset. From left to right: PCC, SSIM, and CMD.
+In PCC and SSIM plots, each teal point represents an individual gene, and the
+black point indicates the mean value across all genes. C. Quantitative evaluation
+of SpatialEx+ predicted metabolite on the mouse brain spatial transcriptome-
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+metabolome dataset. From left to right: PCC, SSIM, and CMD. In PCC and SSIM
+plots, each brown point represents an individual metabolite, and the black point
+indicates the mean value across all metabolites. D. Visualization of SpatialEx+
+predicted metabolites expression against ground truth. Slice 1: SpatialEx+
+expanded the measured metabolite expression to the whole slide image (WSI)
+wide. Slice 2: SpatialEx+ predicted metabolite expression on WSI. E. Visualization
+of SpatialEx+ predicted genes expression against ground truth. Slice 1: SpatialEx+
+predicted gene expression on WSI. Slice 2: SpatialEx+ expanded the measured
+gene expression to the WSI. (Scale bars in E: 500 um).
+
+Article
+
+Extended Data Fig. 9 | Visualization of gene expression predicted by
+SpatialEx+ at each stride. From stride 0 to 9, the overlapping area between
+the two sections progressively diminishes until complete non-overlap. The red
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+dashed box enclosed the region involved in model training at each stride.
+The measured expression of each gene is illustrated on the bottom row.
+(Scale bars: 1 mm).
+
+Article
+
+Extended Data Fig. 10 | Parameter sensitivity analysis on Human_Breast_
+Cancer dataset. A. The bar plot shows the mean PCC of SpatialEx across different
+datasets using different H&E foundation models and ResNet50 on H&E-to-omics
+task. B. Keeping other parameters at their default settings (num_neighbors=7,
+patch_radius=64), the bar plot illustrates the mean PCC of SpatialEx + ’s results
+using different image encoders on panel integration task. C. Keeping other
+parameters at their default settings (num_neighbors=7, image_encoder = “UNI”),
+
+Nature Methods
+
+https://doi.org/10.1038/s41592-025-02926-6
+
+the bar plot illustrates the mean PCC of SpatialEx+ ’s results using different patch
+radiuses on panel integration task. D. Keeping other parameters at their default
+settings (patch_radius=64, image_encoder = “UNI”), the bar plot illustrates
+the mean PCC of SpatialEx+ ’s results using different spatial context—different
+number of neighbors on panel integration task. Error bars represent the standard
+error of the mean (SEM) in all subplots.
+
+

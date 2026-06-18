@@ -49,6 +49,8 @@ def parse_args():
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--device", type=str, default=None)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--panel_csv", type=str, default=None,
+                        help="CSV with columns gene,panel (panelA/panelB); overrides random split")
     parser.add_argument("--out_dir", type=str,
                         default=os.path.join(PROJECT_ROOT, "outputs", "conditional", "fig3_conditional_cycle"))
     return parser.parse_args()
@@ -106,11 +108,17 @@ def main():
     print(f"Rep1: {rep1_full.shape}, Rep2: {rep2_full.shape}")
 
     # Split panel A/B
-    genes = rep1_full.var_names.values
-    np.random.seed(args.seed)
-    np.random.shuffle(genes)
-    panelA_genes = genes[:args.panelA_size].tolist()
-    panelB_genes = genes[args.panelA_size:].tolist()
+    if args.panel_csv and os.path.exists(args.panel_csv):
+        panel_df = pd.read_csv(args.panel_csv)
+        panelA_genes = panel_df[panel_df['panel'] == 'panelA']['gene'].astype(str).tolist()
+        panelB_genes = panel_df[panel_df['panel'] == 'panelB']['gene'].astype(str).tolist()
+        print(f"Loaded panel split from {args.panel_csv}")
+    else:
+        genes = rep1_full.var_names.values
+        np.random.seed(args.seed)
+        np.random.shuffle(genes)
+        panelA_genes = genes[:args.panelA_size].tolist()
+        panelB_genes = genes[args.panelA_size:].tolist()
     print(f"Panel A: {len(panelA_genes)} genes, Panel B: {len(panelB_genes)} genes")
 
     rep1_A, rep1_B = split_panels(rep1_full, panelA_genes, panelB_genes)

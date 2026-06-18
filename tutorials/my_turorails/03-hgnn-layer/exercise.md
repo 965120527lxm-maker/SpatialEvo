@@ -23,6 +23,9 @@
 class HGNNLayer(nn.Module):
     def __init__(self, in_dim: int, out_dim: int, dropout: float = 0.1):
         super().__init__()
+        self.in_dim=in_dim
+        self.out_dim=out_dim
+        self.dropout=dropout
         # YOUR CODE HERE
     
     def forward(self, x: torch.Tensor, adj_norm: torch.Tensor) -> torch.Tensor:
@@ -42,7 +45,14 @@ class HGNNLayer(nn.Module):
             Updated node features.
         """
         # YOUR CODE HERE
-        pass
+        # 1. build hypergraph
+
+        # 2. message passing
+
+        # 3. return x
+        w=random((indim,outdim))
+        out=np.sigma(out=adj_norm @ x @ w)
+        return out
 ```
 
 ## 数学公式

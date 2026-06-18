@@ -21,9 +21,10 @@ def normalize_graph(adj: sp.csr_matrix, norm_type: str = 'gcn') -> sp.csr_matrix
         Normalized adjacency matrix.
     """
     # YOUR CODE HERE
-    if norm_type=="gcn":
-        dim=adj.shape
-        adj_=adj+np.eye(dim[0])
-        norm_adj=adj
+    if norm_type == 'gcn':
+        D = np.array(adj.sum(axis=1)).flatten()
+        D_inv_sqrt = sp.diags(np.power(D + 1e-8, -0.5))
+        return D_inv_sqrt @ adj @ D_inv_sqrt
 
-    raise NotImplementedError
+
+    # raise NotImplementedError

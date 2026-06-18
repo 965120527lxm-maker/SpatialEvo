@@ -1,18 +1,11 @@
 """
 Lightweight measured-panel-conditioned SpatialEx+ baseline.
 
-Concatenates H&E and the measured panel, optionally standardises them, and
-predicts the missing panel with a 2-layer MLP.  Cross-slice pseudo-labels can
-be generated either from H&E (fully diagonal) or from the measured panels.
+Cross-slice pseudo-labels under Fig.3 strict protocol:
+* Slice 1 missing Panel B: H&E cross-slice MNN (HE1 ↔ HE2), transfer B2.
+* Slice 2 missing Panel A: B-panel cross-slice MNN (B2 ↔ pseudo B1), transfer A1.
 
-Measured-panel pseudo-labels are built as follows:
-* Slice 1 missing Panel B: match measured A1 to measured A2 on the other slice
-  and transfer measured B2.
-* Slice 2 missing Panel A: match measured B2 to the pseudo Panel B computed for
-  slice 1, then transfer measured A1.
-
-This uses measured panels from both slices to build training targets, but never
-uses the held-out panel of the slice being predicted (Y_B1 or Y_A2).
+Never uses held-out Y_B1 or Y_A2.
 """
 
 import numpy as np
@@ -21,6 +14,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from . import preprocess as pp
+from .SpatialEx_conditional_gt import build_strict_mnn_pseudo_labels
 
 
 class ConditionalMLP(nn.Module):
@@ -85,12 +79,12 @@ class SpatialExP_ConditionalMLP:
         Slice 1 measured panel A, slice 2 measured panel B. Both contain
         ``obsm['he']`` and expression in ``.X``.
     mode : str
-        One of ``'he_conditional'`` or ``'measured_pseudo'``.
-    measured_A2, measured_B1 : np.ndarray, optional
-        Measured panel A on slice 2 and measured panel B on slice 1. Required
-        for ``'measured_pseudo'`` mode.
+        One of ``'he_conditional'`` (H&E kNN pseudo-labels) or
+        ``'measured_pseudo'`` (strict Fig.3 MNN pseudo-labels).
     pseudo_k : int
-        k for nearest-neighbour pseudo-label averaging.
+        k for pseudo-label neighbor averaging / MNN fallback.
+    mnn_k : int
+        MNN neighbor pool size (``measured_pseudo`` mode only).
     hidden_dim : int
         Hidden dimension of the MLP.
     epochs, lr, dropout : training hyperparameters.
@@ -103,9 +97,8 @@ class SpatialExP_ConditionalMLP:
                  adata1,
                  adata2,
                  mode='he_conditional',
-                 measured_A2=None,
-                 measured_B1=None,
                  pseudo_k=5,
+                 mnn_k=20,
                  hidden_dim=512,
                  epochs=500,
                  lr=1e-3,
@@ -118,6 +111,7 @@ class SpatialExP_ConditionalMLP:
         self.device = device
         self.mode = mode
         self.pseudo_k = pseudo_k
+        self.mnn_k = mnn_k
         self.hidden_dim = hidden_dim
         self.epochs = epochs
         self.lr = lr
@@ -161,14 +155,10 @@ class SpatialExP_ConditionalMLP:
 
         # Build pseudo labels
         if self.mode == 'measured_pseudo':
-            if measured_A2 is None or measured_B1 is None:
-                raise ValueError("measured_A2 and measured_B1 are required for measured_pseudo mode")
-            self.YA2_orig = np.asarray(measured_A2.toarray() if hasattr(measured_A2, 'toarray') else measured_A2,
-                                       dtype=np.float32)
-            self.YB1_orig = np.asarray(measured_B1.toarray() if hasattr(measured_B1, 'toarray') else measured_B1,
-                                       dtype=np.float32)
-            print('Building measured-panel cross-slice pseudo-labels...')
-            self.pseudo_YB1, self.pseudo_YA2 = self._build_measured_pseudo_labels()
+            print('Building strict Fig.3 MNN pseudo-labels...')
+            self.pseudo_YB1, self.pseudo_YA2 = build_strict_mnn_pseudo_labels(
+                self.HE1_orig, self.HE2_orig, self.YA1_orig, self.YB2_orig,
+                k=self.pseudo_k, mnn_k=self.mnn_k, device=self.device)
         elif self.mode == 'he_conditional':
             print('Building H&E cross-slice pseudo-labels...')
             self.pseudo_YB1 = batched_cosine_knn_pseudo(
@@ -205,16 +195,6 @@ class SpatialExP_ConditionalMLP:
             list(self.model_AB.parameters()) + list(self.model_BA.parameters()),
             lr=lr, weight_decay=0)
         self.criterion = nn.MSELoss()
-
-    def _build_measured_pseudo_labels(self):
-        """Measured-panel pseudo labels (see module docstring)."""
-        # Slice 1: A1 -> A2, transfer B2
-        pseudo_YB1 = batched_cosine_knn_pseudo(
-            self.YA1_orig, self.YA2_orig, self.YB2_orig, k=self.pseudo_k, device=self.device)
-        # Slice 2: B2 -> pseudo B1, transfer A1
-        pseudo_YA2 = batched_cosine_knn_pseudo(
-            self.YB2_orig, pseudo_YB1, self.YA1_orig, k=self.pseudo_k, device=self.device)
-        return pseudo_YB1, pseudo_YA2
 
     @staticmethod
     def _make_input(he, measured):
