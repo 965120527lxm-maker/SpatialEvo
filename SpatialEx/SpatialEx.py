@@ -319,6 +319,9 @@ class SpatialExP:
                  save_path=None,
                  translator_hidden_dim=512,
                  use_dgi=True,
+                 lambda_recon=1.0,
+                 lambda_map=1.0,
+                 lambda_cycle=1.0,
                  ):
         """Initialize the SpatialEx+ trainer with cycle-style regression heads.
 
@@ -374,6 +377,9 @@ class SpatialExP:
             :class:`~model.Model_Plus`. Set to False when comparing against
             :class:`SpatialExP_GT` at the same hidden dimension, because the
             Graph Transformer baseline does not use DGI.
+        lambda_recon, lambda_map, lambda_cycle : float, default 1.0
+            Weights for loss1+2 (backbone recon), loss3+4 (within-slice map),
+            and loss5+6 (cross-slice cycle), respectively.
         """
         self.adata1 = adata1
         self.adata2 = adata2
@@ -397,6 +403,9 @@ class SpatialExP:
         self.platform = platform
         self.translator_hidden_dim = translator_hidden_dim
         self.use_dgi = use_dgi
+        self.lambda_recon = lambda_recon
+        self.lambda_map = lambda_map
+        self.lambda_cycle = lambda_cycle
         # 空间参数
         self.num_neighbors = num_neighbors
         self.graph_kind = graph_kind
@@ -470,7 +479,9 @@ class SpatialExP:
 
                     loss5, _ = self.rm_AB(panel_2a[selection2], panel_2b, agg_exp2, agg_mtx2, self.use_agg) #对切片2的组学a进行预测，在映射回组学b，与切片2的真实标签进行比较
                     loss6, _ = self.rm_BA(panel_1b[selection1], panel_1a, agg_exp1, agg_mtx1, self.use_agg) #对切片1的组学b进行预测，在映射回组学a，与切片1的真实标签进行比较
-                    loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+                    loss = (self.lambda_recon * (loss1 + loss2)
+                            + self.lambda_map * (loss3 + loss4)
+                            + self.lambda_cycle * (loss5 + loss6))
 
                     self.optimizer.zero_grad()
                     loss.backward()
@@ -488,7 +499,9 @@ class SpatialExP:
 
                 loss5, _ = self.rm_AB(self.panelA1, panelB1, use_agg=False)
                 loss6, _ = self.rm_BA(self.panelB2, panelA2, use_agg=False)
-                loss = loss1 + loss2 + loss3 + loss4 + loss5 + loss6
+                loss = (self.lambda_recon * (loss1 + loss2)
+                        + self.lambda_map * (loss3 + loss4)
+                        + self.lambda_cycle * (loss5 + loss6))
 
                 self.optimizer.zero_grad()
                 loss.backward()

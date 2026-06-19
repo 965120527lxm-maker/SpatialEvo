@@ -15,6 +15,8 @@ import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'experiments', 'fig3'))
+from exp_paths import output_dir
 
 import argparse
 import numpy as np
@@ -62,8 +64,7 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--panel_csv', type=str, default=None,
                         help='CSV with columns gene,panel (panelA/panelB); overrides random split')
-    parser.add_argument('--out_dir', type=str,
-                        default=os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_mnn_pseudo'))
+    parser.add_argument('--out_dir', type=str, default=output_dir('mnn_pseudo_strict_official'))
     return parser.parse_args()
 
 

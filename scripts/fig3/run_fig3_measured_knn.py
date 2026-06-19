@@ -20,6 +20,8 @@ import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'experiments', 'fig3'))
+from exp_paths import output_dir
 
 import argparse
 import numpy as np
@@ -57,8 +59,10 @@ def main():
     parser.add_argument('--k', type=int, default=5)
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--out_dir', type=str, default=os.path.join(PROJECT_ROOT, 'outputs', 'oracles', 'fig3_measured_knn'))
+    parser.add_argument('--out_dir', type=str, default=None)
     args = parser.parse_args()
+    if args.out_dir is None:
+        args.out_dir = output_dir(f'measured_knn_oracle_k{args.k}')
 
     os.makedirs(args.out_dir, exist_ok=True)
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')

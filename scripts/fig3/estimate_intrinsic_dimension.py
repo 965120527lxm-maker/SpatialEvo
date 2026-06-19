@@ -6,6 +6,8 @@ import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'experiments', 'fig3'))
+from exp_paths import output_dir
 
 import argparse
 import numpy as np
@@ -27,8 +29,7 @@ def parse_args():
     parser.add_argument("--panel_csv", type=str, default=os.path.join(PROJECT_ROOT, "data", "panel_split_official.csv"))
     parser.add_argument("--twonn_n", type=int, default=8000, help="Subsample size for TwoNN")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--out_dir", type=str,
-                        default=os.path.join(PROJECT_ROOT, "outputs", "baselines", "fig3_id_estimate"))
+    parser.add_argument("--out_dir", type=str, default=output_dir('intrinsic_dimension'))
     return parser.parse_args()
 
 

@@ -47,8 +47,13 @@ results/
 .DS_Store
 Thumbs.db
 
-# Model checkpoints
-outputs/
+# Generated experiment artifacts (re-run via experiments/fig3/<slug>/run.sh)
+outputs/*
+!outputs/README.md
+experiments/**/outputs/
+
+# Large local exports / binaries
+*.pdf
 checkpoints/
 *.pt
 *.pth

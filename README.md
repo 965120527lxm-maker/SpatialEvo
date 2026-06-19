@@ -47,11 +47,16 @@ SpatialEx/
 │   ├── utils.py
 │   └── __init__.py
 ├── scripts/                        # 实验脚本
-│   ├── fig3/                       # Fig.3 panel diagonal integration 诊断脚本
+│   ├── fig3/                       # Fig.3 panel diagonal integration
 │   │   ├── run_fig3_mnn_pseudo.py
-│   │   ├── run_fig3_latent_mnn.py
+│   │   ├── run_fig3_mnn_sweep.py
+│   │   ├── sync_experiments.py
 │   │   └── generate_fig3_figures.py
-│   └── ...                         # 其他复现/对比脚本
+│   ├── baselines/
+│   ├── multi_omics/
+│   └── tests/
+├── experiments/                    # 可复现实验（README + run.sh + outputs/，outputs 不入库）
+│   └── fig3/                       # 见 INDEX.csv
 ├── curriculum/                     # 从 01 到 15 的渐进式实现章节
 ├── data/                           # 本地数据（需自行下载/软链）
 ├── docs/
@@ -118,24 +123,26 @@ data/Human_Breast_Cancer_Rep1_uni_resolution64_full.h5ad
 data/Human_Breast_Cancer_Rep2_uni_resolution64_full.h5ad
 ```
 
-### 2. 运行 MNN pseudo-label 主实验
+### 2. 运行 MNN pseudo-label 主实验（official split）
 
 ```bash
-python scripts/fig3/run_fig3_mnn_pseudo.py
+./experiments/fig3/mnn_pseudo_strict_official/run.sh
+# 或
+python scripts/fig3/run_fig3_mnn_pseudo.py --panel_csv data/panel_split_official.csv
 ```
 
 - 比较 `raw kNN` 与 `MNN` pseudo-label
 - 训练 measured-panel conditional MLP
-- 输出 `outputs/conditional/mnn_pseudo_results.csv`
+- 输出 `experiments/fig3/mnn_pseudo_strict_official/outputs/mnn_metrics.csv`
 
 ### 3. 运行 latent MNN 延伸实验
 
 ```bash
-python scripts/fig3/run_fig3_latent_mnn.py
+./experiments/fig3/latent_mnn_official/run.sh
 ```
 
 - 比较 `raw measured panel`、`PCA latent`、`CORAL aligned` 三种 matching space
-- 输出 `outputs/conditional/latent_mnn_results.csv`
+- 输出 `experiments/fig3/latent_mnn_official/outputs/latent_mnn_results.csv`
 
 ### 4. 生成诊断图
 
@@ -204,6 +211,7 @@ python scripts/fig3/generate_fig3_figures.py
 
 ## 相关文档
 
+- [`docs/report/repo.6.21.md`](docs/report/repo.6.21.md)：MNN sweep / alignment benchmark / 最新 official split 结果
 - [`docs/report/repo.6.16.md`](docs/report/repo.6.16.md)：Fig.3 panel diagonal integration 机制诊断报告
 - [`docs/BUGFIXES.md`](docs/BUGFIXES.md)：官方代码 bug 修复详细记录
 - [`docs/A100_RUN_GUIDE.md`](docs/A100_RUN_GUIDE.md)：A100 / 多卡 / 大显存运行指南

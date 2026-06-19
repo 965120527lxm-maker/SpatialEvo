@@ -36,7 +36,7 @@ Optimize SpatialEx-family models on **Fig.3 panel diagonal integration** (Xenium
 
 - Primary baseline: `SpatialExP` / `SpatialExP_GT` + cycle on official split (~0.27–0.30 PCC).
 - Metrics: gene-level PCC, SSIM, CMD; report Slice1 PanelB and Slice2 PanelA separately.
-- Scripts: `scripts/fig3/run_fig3_panel_split.py`; outputs under `outputs/conditional/`.
+- Scripts: `scripts/fig3/run_fig3_panel_split.py`; outputs under `experiments/fig3/<slug>/outputs/`.
 
 ## Do not conflate
 

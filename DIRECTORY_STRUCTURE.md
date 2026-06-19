@@ -12,14 +12,12 @@ SpatialEx/
 │   ├── preprocess.py
 │   └── utils.py
 ├── data/                      # Input h5ad files (not tracked by git)
-├── outputs/                   # Experimental results
-│   ├── archive/               # Obsolete / duplicate runs
-│   ├── baselines/             # Fig. 3 unconditioned baselines
-│   ├── conditional/           # Fig. 3 measured-panel conditioned runs
-│   ├── oracles/               # Non-parametric measured-panel kNN oracles
-│   ├── summaries/             # Markdown summaries and tables
-│   ├── baseline_spatialex/    # SpatialEx baseline output
-│   └── multi_omics*/          # Multi-omics outputs
+├── experiments/               # Reproducible runs (README + run.sh + local outputs/)
+│   ├── fig3/                  # Fig.3: one folder per experiment; see INDEX.csv
+│   ├── multi_omics/
+│   ├── baselines/
+│   └── README.md
+├── outputs/                   # Deprecated — see outputs/README.md → experiments/
 ├── scripts/                   # Executable experiment scripts
 │   ├── baselines/             # run_baseline_spatialex.py
 │   ├── fig3/                  # Fig. 3 panel-split experiments
@@ -43,6 +41,9 @@ cd /path/to/SpatialEx
 
 # Fig. 3 panel split
 python scripts/fig3/run_fig3_panel_split.py --model conditional_mlp --mlp_mode measured_pseudo --pseudo_k 50
+
+# Official-split SOTA (MLP + Strict MNN)
+./experiments/fig3/mnn_pseudo_strict_official/run.sh
 
 # Measured-panel kNN oracle
 python scripts/fig3/run_fig3_measured_knn.py --k 50

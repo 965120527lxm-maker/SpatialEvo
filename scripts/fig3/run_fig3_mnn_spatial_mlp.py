@@ -30,6 +30,8 @@ from tqdm import tqdm
 import SpatialEx as se
 
 sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts', 'fig3'))
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'experiments', 'fig3'))
+from exp_paths import output_dir
 import run_fig3_mnn_pseudo as mnn
 
 
@@ -73,8 +75,7 @@ def parse_args():
     parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--out_dir', type=str,
-                        default=os.path.join(PROJECT_ROOT, 'outputs', 'conditional',
-                                            'fig3_mnn_spatial_mlp_official'))
+                        default=os.path.join(output_dir('mnn_spatial_mlp_official'), 'none'))
     return parser.parse_args()
 
 

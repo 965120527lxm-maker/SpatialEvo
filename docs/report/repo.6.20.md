@@ -73,6 +73,8 @@ Strict MNN 伪标签构造：
 
 > MLP strict MNN 脚本训练 300 epochs；其余多为 500 epochs。
 
+在这一节的结果中, 对比HGNN-512+cycle 和 HGNN-512 + MNN 的结果, 发现cycle的PCC和SSIM更强, 推测cycle能够加强HGNN对自身空间的感知. 而HGNN-512+cycle 和 MLP + cycle 的结果对比, 可以看到在没有感知到空间信息的时候, 自环只会加强噪音. 进一步地, MLP+MNN 的结果表明, MLP本身没有感知within-panel的空间信息, 而是依靠MNN 学习到了跨panel的空间信息. 所以, MNN的作用是提供跨panel的空间信息, cycle 则是加强架构本身学习到的空间信息. 然后, HGNN-512 的信息和MNN的信息相互混合的时候, 可能反而没有HGNN-512 自身的空间信息那么明确, 所以HGNN-512+cycle 比 HGNN-512 + MNN 表现好. 
+ 
 ### 3.2 Oracle MNN（使用了 $Y_A^2$，**不作主结论**）
 
 | 编码器   | 监督       | Slice1 PCC | Slice2 PCC | 输出目录                             |

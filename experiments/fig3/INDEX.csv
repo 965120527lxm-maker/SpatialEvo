@@ -1,0 +1,25 @@
+slug,title,script,has_results,path
+mnn_pseudo_strict_official,MLP + Strict MNN pseudo-labels (official panel split),scripts/fig3/run_fig3_mnn_pseudo.py,True,experiments/fig3/mnn_pseudo_strict_official/outputs
+mnn_sweep_official,MNN k / mnn_k sensitivity (official split),scripts/fig3/run_fig3_mnn_sweep.py,True,experiments/fig3/mnn_sweep_official/outputs
+mlp_hidden_sweep_official,MLP hidden_dim sweep under Strict MNN,scripts/fig3/run_fig3_mlp_hidden_sweep.py,True,experiments/fig3/mlp_hidden_sweep_official/outputs
+hgnn_cycle_sweep_official,HGNN+Cycle num_neighbors sweep (official split),scripts/fig3/run_fig3_hgnn_cycle_sweep.py,True,experiments/fig3/hgnn_cycle_sweep_official/outputs
+alignment_benchmark_official,Step1 alignment methods (OT / MNN / PCA; Step2=mnn_bpanel),scripts/fig3/run_fig3_alignment_benchmark.py,True,experiments/fig3/alignment_benchmark_official/outputs
+two_step_alignment_benchmark_official,Step1×Step2 alignment pipeline benchmark,scripts/fig3/run_fig3_alignment_benchmark.py,True,experiments/fig3/two_step_alignment_benchmark_official/outputs
+mnn_spatial_mlp_official,MLP + Strict MNN + within-slice spatial KNN context,scripts/fig3/run_fig3_mnn_spatial_mlp.py,True,experiments/fig3/mnn_spatial_mlp_official/outputs
+latent_mnn_official,PCA / CORAL H&E latent + MNN (official split),scripts/fig3/run_fig3_latent_mnn.py,True,experiments/fig3/latent_mnn_official/outputs
+spatialexp_official,"HGNN + Cycle (SpatialExP, official split)",scripts/fig3/run_fig3_panel_split.py,True,experiments/fig3/spatialexp_official/outputs
+spatialexp_gt_official,GT-128 + Cycle (official split),scripts/fig3/run_fig3_panel_split.py,True,experiments/fig3/spatialexp_gt_official/outputs
+conditional_gt_mnn_strict_official,GT-128 + Strict MNN,scripts/fig3/run_fig3_panel_split.py,True,experiments/fig3/conditional_gt_mnn_strict_official/outputs
+conditional_hgnn_mnn_strict_official,HGNN-512 + Strict MNN,scripts/fig3/run_fig3_panel_split.py,True,experiments/fig3/conditional_hgnn_mnn_strict_official/outputs
+mnn_cycle_strict_official,MLP + Strict MNN + Cycle,scripts/fig3/run_fig3_panel_split.py,True,experiments/fig3/mnn_cycle_strict_official/outputs
+conditional_cycle_strict_official,MLP + Cycle only (no MNN),scripts/fig3/run_fig3_conditional_cycle.py,True,experiments/fig3/conditional_cycle_strict_official/outputs
+per_gene_pcc,Per-gene PCC: raw kNN vs MNN,scripts/fig3/analyze_per_gene_pcc.py,True,experiments/fig3/per_gene_pcc/outputs
+marker_visualization_slice2,Marker gene spatial plots (Slice2),scripts/fig3/visualize_marker_genes.py,True,experiments/fig3/marker_visualization_slice2/outputs
+decomposed_diagnosis,Branch decomposition diagnosis (H&E vs panel vs fusion),scripts/fig3/diagnose_spatialex_vs_cycle_outputs.py,True,experiments/fig3/decomposed_diagnosis/outputs
+deeppt_official,DeepPT baseline (official split),scripts/baselines/run_deeppt_fig3.py,True,experiments/fig3/deeppt_official/outputs
+ssim_comparison,DeepPT vs HGNN/GT/MLP SSIM+PCC comparison,scripts/fig3/analyze_ssim_comparison.py,True,experiments/fig3/ssim_comparison/outputs
+intrinsic_dimension,PR + TwoNN intrinsic dimension estimate,scripts/fig3/estimate_intrinsic_dimension.py,True,experiments/fig3/intrinsic_dimension/outputs
+measured_knn_oracle_k5,Oracle: same-slice measured panel kNN (k=5),scripts/fig3/run_fig3_measured_knn.py,True,experiments/fig3/measured_knn_oracle_k5/outputs
+measured_knn_oracle_k50,Oracle: same-slice measured panel kNN (k=50),scripts/fig3/run_fig3_measured_knn.py,True,experiments/fig3/measured_knn_oracle_k50/outputs
+panel_nn_oracle_rep1,Oracle: Rep1 same-slice PanelA kNN → PanelB,scripts/fig3/panel_nn_oracle.py,True,experiments/fig3/panel_nn_oracle_rep1/outputs
+mnn_sweep_random,"MNN k sweep (random panel split, legacy diagnostic)",scripts/fig3/run_fig3_mnn_sweep.py,True,experiments/fig3/mnn_sweep_random/outputs

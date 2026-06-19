@@ -20,25 +20,25 @@ import SpatialEx as se
 
 METHODS = {
     'DeepPT': {
-        'dir': 'outputs/baselines/fig3_deeppt_official',
+        'dir': 'experiments/fig3/deeppt_official/outputs',
         'pred_b1': 'pred_panelB1_deeppt.csv',
         'pred_a2': 'pred_panelA2_deeppt.csv',
         'color': '#e15759',
     },
     'HGNN+Cycle': {
-        'dir': 'outputs/conditional/fig3_spatialexp_official',
+        'dir': 'experiments/fig3/spatialexp_official/outputs',
         'pred_b1': 'pred_panelB1_spatialexp.csv',
         'pred_a2': 'pred_panelA2_spatialexp.csv',
         'color': '#4e79a7',
     },
     'GT+Cycle': {
-        'dir': 'outputs/conditional/fig3_spatialexp_gt_official',
+        'dir': 'experiments/fig3/spatialexp_gt_official/outputs',
         'pred_b1': 'pred_panelB1_spatialexp_gt.csv',
         'pred_a2': 'pred_panelA2_spatialexp_gt.csv',
         'color': '#59a14f',
     },
     'MLP+Strict MNN': {
-        'dir': 'outputs/conditional/fig3_mnn_pseudo_strict_official',
+        'dir': 'experiments/fig3/mnn_pseudo_strict_official/outputs',
         'pred_b1': 'pred_panelB1_mnn.csv',
         'pred_a2': 'pred_panelA2_mnn.csv',
         'color': '#f28e2b',
@@ -53,7 +53,7 @@ def parse_args():
     parser.add_argument('--rep2', type=str, default='Human_Breast_Cancer_Rep2_uni_resolution64_full.h5ad')
     parser.add_argument('--panel_csv', type=str, default=os.path.join(PROJECT_ROOT, 'data', 'panel_split_official.csv'))
     parser.add_argument('--out_dir', type=str,
-                        default=os.path.join(PROJECT_ROOT, 'outputs', 'baselines', 'fig3_ssim_comparison'))
+                        default=os.path.join(PROJECT_ROOT, 'experiments', 'fig3', 'ssim_comparison', 'outputs'))
     return parser.parse_args()
 
 

@@ -15,7 +15,12 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
 OUT_DIR = os.path.join(PROJECT_ROOT, 'docs', 'image', 'fig3_diagnosis')
+FIG3_EXP = os.path.join(PROJECT_ROOT, 'experiments', 'fig3')
 os.makedirs(OUT_DIR, exist_ok=True)
+
+
+def fig3_out(slug):
+    return os.path.join(FIG3_EXP, slug, 'outputs')
 
 
 def save(fig, name):
@@ -26,7 +31,7 @@ def save(fig, name):
 
 
 def plot_branch_decomposition():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_decomposed_diagnosis', 'decomposed_metrics.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('decomposed_diagnosis'), 'decomposed_metrics.csv'))
     variants = df['variant'].tolist()
     slice1 = df['slice1_pcc'].values
     slice2 = df['slice2_pcc'].values
@@ -46,7 +51,7 @@ def plot_branch_decomposition():
 
 
 def plot_mnn_sweep():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_mnn_sweep', 'mnn_sweep.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('mnn_sweep_random'), 'mnn_sweep.csv'))
     df['config'] = df['k'].astype(str) + '/' + df['mnn_k'].astype(str)
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
@@ -63,7 +68,7 @@ def plot_mnn_sweep():
 
 
 def plot_per_gene_scatter():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_per_gene_pcc', 'per_gene_pcc.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('per_gene_pcc'), 'per_gene_pcc.csv'))
     colors = {'Slice1': '#4c78a8', 'Slice2': '#f58518'}
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
@@ -82,7 +87,7 @@ def plot_per_gene_scatter():
 
 
 def plot_mnn_gain_volcano():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_per_gene_pcc', 'per_gene_pcc.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('per_gene_pcc'), 'per_gene_pcc.csv'))
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     for ax, sl in zip(axes, ['Slice1', 'Slice2']):
         d = df[df['slice'] == sl].copy()
@@ -99,7 +104,7 @@ def plot_mnn_gain_volcano():
 
 
 def plot_latent_alignment():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_latent_mnn', 'latent_mnn_results.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('_legacy/latent_mnn'), 'latent_mnn_results.csv'))
     methods = df['method'].tolist()
     slice1 = df['slice1_learned_pcc'].values
     slice2 = df['slice2_learned_pcc'].values
@@ -188,7 +193,7 @@ def plot_signal_contribution():
 
 
 def plot_top_marker_gains():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_per_gene_pcc', 'per_gene_pcc.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('per_gene_pcc'), 'per_gene_pcc.csv'))
     d = df[df['slice'] == 'Slice2'].nlargest(10, 'mnn_gain')
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.barh(d['gene'][::-1], d['mnn_gain'][::-1], color='#59a14f')
@@ -198,7 +203,7 @@ def plot_top_marker_gains():
 
 
 def plot_pcc_distribution():
-    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'outputs', 'conditional', 'fig3_per_gene_pcc', 'per_gene_pcc.csv'))
+    df = pd.read_csv(os.path.join(fig3_out('per_gene_pcc'), 'per_gene_pcc.csv'))
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for ax, sl, color in zip(axes, ['Slice1', 'Slice2'], ['#4c78a8', '#f58518']):
         d = df[df['slice'] == sl]
