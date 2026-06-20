@@ -10,3 +10,4 @@ from .SpatialEx_conditional_gt import SpatialExP_ConditionalGT, build_strict_mnn
 from .SpatialEx_conditional_hgnn import SpatialExP_ConditionalHGNN
 from .SpatialEx_conditional_mnn_cycle_mlp import SpatialExP_ConditionalMNNCycleMLP
 from .SpatialEx_improved import SpatialExP_GT
+from .SpatialEx_gt import SpatialExGT

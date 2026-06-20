@@ -235,6 +235,25 @@ class MaskedFeaturePrediction(nn.Module):
         return loss
 
 
+class DGIEmbeddingLoss(nn.Module):
+    """DGI-style contrastive loss on encoder node embeddings."""
+
+    def __init__(self):
+        super().__init__()
+        self.b_xent = nn.CosineEmbeddingLoss()
+
+    def forward(self, h_pos, h_neg):
+        n = h_pos.shape[0]
+        c = torch.mean(h_pos, dim=0, keepdim=True)
+        dev = h_pos.device
+        lbl_pos = torch.ones(n, device=dev)
+        lbl_neg = -torch.ones(n, device=dev)
+        return (
+            self.b_xent(h_pos, c.expand_as(h_pos), lbl_pos)
+            + self.b_xent(h_neg, c.expand_as(h_neg), lbl_neg)
+        )
+
+
 class Model_GT(nn.Module):
     """Graph Transformer based SpatialEx model."""
     
@@ -248,10 +267,19 @@ class Model_GT(nn.Module):
                  num_heads=8,
                  dropout=0.1,
                  use_mfp=True,
+                 use_dgi=False,
+                 mfp_weight=0.1,
+                 dgi_weight=1.0,
                  mask_ratio=0.15):
         super(Model_GT, self).__init__()
-        
+
+        if use_mfp and use_dgi:
+            raise ValueError("Model_GT: use_mfp and use_dgi are mutually exclusive")
+
         self.use_mfp = use_mfp
+        self.use_dgi = use_dgi
+        self.mfp_weight = mfp_weight
+        self.dgi_weight = dgi_weight
         self.device = device
         
         self.encoder = GraphTransformerEncoder(
@@ -271,6 +299,8 @@ class Model_GT(nn.Module):
         
         if self.use_mfp:
             self.mfp = MaskedFeaturePrediction(hidden_dim, mask_ratio=mask_ratio)
+        if self.use_dgi:
+            self.dgi_loss = DGIEmbeddingLoss()
         
         if loss_fn == 'mse':
             self.criterion = nn.MSELoss()
@@ -287,9 +317,12 @@ class Model_GT(nn.Module):
             loss = self.criterion(x_prime, exp)
         
         if self.use_mfp:
-            mfp_loss = self.mfp(enc, he_rep)
-            loss = loss + 0.1 * mfp_loss
-            
+            loss = loss + self.mfp_weight * self.mfp(enc, he_rep)
+        elif self.use_dgi:
+            idx = torch.randperm(he_rep.shape[0], device=he_rep.device)
+            enc_corrupt = self.encoder(he_rep[idx], graph)
+            loss = loss + self.dgi_weight * self.dgi_loss(enc, enc_corrupt)
+
         return loss, x_prime
     
     def predict(self, he_representations, graph, grad=False):

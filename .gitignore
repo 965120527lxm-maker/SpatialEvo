@@ -33,9 +33,11 @@ data/
 *.npy
 results/
 
-# IDE
+# IDE / local agent configs
 .vscode/
 .idea/
+.cursor/
+.kimi/
 *.swp
 *.swo
 *~
@@ -51,6 +53,7 @@ Thumbs.db
 outputs/*
 !outputs/README.md
 experiments/**/outputs/
+logs/
 
 # Large local exports / binaries
 *.pdf

@@ -139,6 +139,48 @@ def load_groundtruth_rna_rep1(data_root, protein_adata):
     return gt
 
 
+def load_groundtruth_protein_rep2(data_root, protein_adata, protein_cols, cell_names):
+    """Load Rep2 ground-truth protein; scale with Slice1 protein statistics."""
+    niche_path = os.path.join(data_root, "10x_breast_cancer", "human_breast_cancer.h5ad")
+    niche = sc.read_h5ad(niche_path)
+    niche.obs_names = niche.obs_names.astype(str)
+    niche = niche[list(map(str, cell_names))].copy()
+
+    raw = niche.obs[protein_cols].values.astype(np.float32)
+    means = protein_adata.var["mean"].values.astype(np.float32)
+    stds = protein_adata.var["std"].values.astype(np.float32)
+    scaled = (raw - means) / (stds + 1e-8)
+
+    gt = sc.AnnData(X=scaled, obs=niche.obs.copy())
+    gt.var_names = pd.Index(protein_cols)
+    rep2 = sc.read_h5ad(os.path.join(data_root, "Human_Breast_Cancer_Rep2_uni_resolution64_full.h5ad"))
+    rep2.obs_names = rep2.obs_names.astype(str)
+    gt.obsm["spatial"] = rep2[gt.obs_names].obsm["spatial"].copy()
+    return gt
+
+
+def evaluate_protein_prediction(adata_gt, pred, label="Slice 2"):
+    """Evaluate predicted protein against ground truth (PCC, SSIM, CMD)."""
+    graph = se.pp.Build_graph(
+        adata_gt.obsm["spatial"], graph_type="knn", weighted="gaussian",
+        apply_normalize="row", return_type="coo"
+    )
+    gt_X = adata_gt.X.toarray() if hasattr(adata_gt.X, "toarray") else np.array(adata_gt.X.copy())
+    pred_X = np.array(pred.copy())
+
+    pcc, pcc_reduce = se.utils.Compute_metrics(gt_X, pred_X, metric="pcc")
+    ssim, ssim_reduce = se.utils.Compute_metrics(gt_X, pred_X, metric="ssim", graph=graph)
+    cmd, cmd_reduce = se.utils.Compute_metrics(gt_X, pred_X, metric="cmd")
+
+    print(f"[{label}] protein-level PCC: {pcc_reduce:.6f}, SSIM: {ssim_reduce:.6f}, CMD: {cmd_reduce:.6f}")
+    return {
+        "pcc_per_feature": pcc,
+        "pcc": float(pcc_reduce),
+        "ssim": float(ssim_reduce),
+        "cmd": float(cmd_reduce),
+    }
+
+
 def evaluate_rna_prediction(adata_gt, pred, label="Slice 1"):
     """Evaluate predicted transcriptomics against ground truth using PCC, SSIM, CMD."""
     graph = se.pp.Build_graph(
@@ -252,8 +294,19 @@ def main():
     adata1_gt = adata1_gt[panelB1.index].copy()
     adata1_gt = adata1_gt[:, panelB1.columns].copy()
 
-    metrics = evaluate_rna_prediction(adata1_gt, panelB1.values, label="Slice 1 protein->RNA")
-    pd.DataFrame([metrics]).to_csv(os.path.join(args.out_dir, "metrics_slice1.csv"), index=False)
+    metrics1 = evaluate_rna_prediction(adata1_gt, panelB1.values, label="Slice 1 protein->RNA")
+    pd.DataFrame([metrics1]).to_csv(os.path.join(args.out_dir, "metrics_slice1.csv"), index=False)
+
+    adata2_gt = load_groundtruth_protein_rep2(
+        args.data_root, adata_protein, protein_cols, panelA2.index)
+    metrics2 = evaluate_protein_prediction(
+        adata2_gt, panelA2.values, label="Slice 2 RNA->protein")
+    pd.DataFrame([metrics2]).to_csv(os.path.join(args.out_dir, "metrics_slice2.csv"), index=False)
+
+    pd.DataFrame([
+        {"slice": "slice1_protein_to_RNA", **{k: v for k, v in metrics1.items() if k != "pcc_per_gene"}},
+        {"slice": "slice2_RNA_to_protein", **{k: v for k, v in metrics2.items() if k != "pcc_per_feature"}},
+    ]).to_csv(os.path.join(args.out_dir, "metrics_summary.csv"), index=False)
 
     print(f"\nOutputs saved to: {args.out_dir}")
 
