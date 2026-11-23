@@ -8,6 +8,7 @@ from .SpatialEx_conditional_mlp import SpatialExP_ConditionalMLP
 from .SpatialEx_conditional_cycle_mlp import SpatialExP_ConditionalCycleMLP
 from .SpatialEx_conditional_gt import SpatialExP_ConditionalGT, build_strict_mnn_pseudo_labels
 from .SpatialEx_conditional_hgnn import SpatialExP_ConditionalHGNN
+from .SpatialEx_conditional_hgnn_v2 import SpatialExP_ConditionalHGNNv2
 from .SpatialEx_conditional_mnn_cycle_mlp import SpatialExP_ConditionalMNNCycleMLP
 from .SpatialEx_improved import SpatialExP_GT
 from .SpatialEx_gt import SpatialExGT

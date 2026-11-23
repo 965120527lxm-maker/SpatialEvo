@@ -13,9 +13,8 @@ from anndata import AnnData
 
 import SpatialEx as se
 
-DEFAULT_EXPR_H5AD = [
-    "/root/autodl-tmp/novae/data/all_h5ad/human/breast/Xenium_V1_FFPE_Human_Breast_IDC_Big_{i}_outs.h5ad",
-]
+DEFAULT_PANEL_CSV = os.path.join("panel_selection", "Big_by_name.csv")
+DEFAULT_XENIUM_SUBDIR = "xenium_big"
 
 
 def _first_existing(root: str, names: Sequence[str]) -> Optional[str]:
@@ -42,9 +41,44 @@ def _build_adata(he, expr, spatial, gene_names, obs_names=None) -> AnnData:
     return adata
 
 
+def _xenium_raw_dir(data_root: str, slice_idx: int) -> str:
+    i = int(slice_idx)
+    return os.path.join(data_root, DEFAULT_XENIUM_SUBDIR, f"Human_Breast_IDC_Big{i}")
+
+
+def _xenium_paths(xenium_dir: str) -> tuple[Optional[str], Optional[str]]:
+    h5 = _first_existing(xenium_dir, ["cell_feature_matrix.h5"])
+    obs = _first_existing(xenium_dir, ["cells.csv", "cells.csv.gz"])
+    return h5, obs
+
+
+def _panel_genes_for_he_alignment(panel_csv: str, slice_idx: int) -> list[str]:
+    """Tutorial 3: slice1 HE uses panelA filtering; slice2 uses panelB."""
+    panel_a, panel_b = load_panel_genes(panel_csv)
+    return panel_a if int(slice_idx) == 1 else panel_b
+
+
+def _load_expr_from_xenium_raw(xenium_dir: str, panel_genes: Sequence[str]) -> AnnData:
+    h5_path, obs_path = _xenium_paths(xenium_dir)
+    if h5_path is None or obs_path is None:
+        raise FileNotFoundError(
+            f"Missing Xenium raw outs under {xenium_dir} "
+            f"(need cell_feature_matrix.h5 and cells.csv)"
+        )
+    adata = se.pp.Read_Xenium(h5_path, obs_path)
+    keep = se.pp.Preprocess_adata(adata.copy(), selected_genes=list(panel_genes)).obs_names
+    adata = adata[keep].copy()
+    adata = se.pp.Preprocess_adata(adata)
+    adata.obs["x_centroid"] = adata.obsm["spatial"][:, 0]
+    adata.obs["y_centroid"] = adata.obsm["spatial"][:, 1]
+    adata.X = _as_array(adata.X).astype(np.float32)
+    return adata
+
+
 def _expr_h5ad_candidates(data_root: str, slice_idx: int) -> list[str]:
     i = int(slice_idx)
     names = [
+        os.path.join(data_root, DEFAULT_XENIUM_SUBDIR, f"Human_Breast_IDC_Big{i}_processed.h5ad"),
         os.path.join(data_root, f"Human_Breast_IDC_Big{i}_uni_resolution64_full.h5ad"),
         os.path.join(data_root, f"Human_Breast_IDC_Big{i}.h5ad"),
         os.path.join(data_root, f"Human_breast_cancer_big_{i}.h5ad"),
@@ -53,8 +87,6 @@ def _expr_h5ad_candidates(data_root: str, slice_idx: int) -> list[str]:
         os.path.join(data_root, f"Big{i}_uni.h5ad"),
         os.path.join(data_root, f"Xenium_V1_FFPE_Human_Breast_IDC_Big_{i}_outs.h5ad"),
     ]
-    for tmpl in DEFAULT_EXPR_H5AD:
-        names.append(tmpl.format(i=i))
     env_key = f"BIG{i}_EXPR_H5AD"
     if os.environ.get(env_key):
         names.insert(0, os.environ[env_key])
@@ -109,7 +141,12 @@ def _prepare_expr_adata(h5ad_path: str, n_he: int) -> AnnData:
     return adata
 
 
-def _load_npy_bundle(path: str, data_root: str) -> AnnData:
+def _load_npy_bundle(
+    path: str,
+    data_root: str,
+    slice_idx: Optional[int] = None,
+    panel_csv: Optional[str] = None,
+) -> AnnData:
     obj = np.load(path, allow_pickle=True, mmap_mode="r")
     if isinstance(obj, np.ndarray) and obj.dtype == object and obj.shape == ():
         obj = obj.item()
@@ -132,6 +169,26 @@ def _load_npy_bundle(path: str, data_root: str) -> AnnData:
         )
 
     stem = os.path.splitext(os.path.basename(path))[0]
+    idx = slice_idx
+    if idx is None:
+        idx = 1 if "1" in stem else 2 if "2" in stem else None
+
+    panel_path = panel_csv or os.path.join(data_root, DEFAULT_PANEL_CSV)
+    if idx is not None:
+        xenium_dir = _xenium_raw_dir(data_root, idx)
+        h5_path, obs_path = _xenium_paths(xenium_dir)
+        if h5_path and obs_path:
+            panel_genes = _panel_genes_for_he_alignment(panel_path, idx)
+            adata = _load_expr_from_xenium_raw(xenium_dir, panel_genes)
+            if adata.n_obs != arr.shape[0]:
+                raise ValueError(
+                    f"{path} has {arr.shape[0]} HE rows but Xenium raw yields "
+                    f"{adata.n_obs} cells after Tutorial-3 filtering. "
+                    f"Check panel CSV and Big{idx}_uni.npy provenance."
+                )
+            adata.obsm["he"] = np.asarray(arr, dtype=np.float32)
+            return adata
+
     sidecar = _first_existing(
         data_root,
         [
@@ -141,14 +198,13 @@ def _load_npy_bundle(path: str, data_root: str) -> AnnData:
             stem.replace("big_", "Human_Breast_IDC_Big") + ".h5ad",
         ],
     )
-    if sidecar is None:
-        idx = 1 if "1" in stem else 2 if "2" in stem else None
-        if idx is not None:
-            sidecar = _first_existing("", _expr_h5ad_candidates(data_root, idx))
+    if sidecar is None and idx is not None:
+        sidecar = _first_existing("", _expr_h5ad_candidates(data_root, idx))
     if sidecar is None:
         raise ValueError(
             f"{path} looks like H&E embeddings only ({arr.shape}). "
-            f"Need a matching expression .h5ad; set BIG1_EXPR_H5AD / BIG2_EXPR_H5AD."
+            f"Extract cell_feature_matrix.h5 + cells.csv under "
+            f"{_xenium_raw_dir(data_root, idx or 1)} or set BIG{idx}_EXPR_H5AD."
         )
 
     adata = _prepare_expr_adata(sidecar, n_he=arr.shape[0])
@@ -156,9 +212,14 @@ def _load_npy_bundle(path: str, data_root: str) -> AnnData:
     return adata
 
 
-def load_big_slice(data_root: str, slice_idx: int) -> AnnData:
-    """Load big slice 1 or 2 from h5ad / npy bundles under data_root."""
+def load_big_slice(
+    data_root: str,
+    slice_idx: int,
+    panel_csv: Optional[str] = None,
+) -> AnnData:
+    """Load big slice 1 or 2 from official Xenium raw + HE npy under data_root."""
     i = int(slice_idx)
+    panel_path = panel_csv or os.path.join(data_root, DEFAULT_PANEL_CSV)
     h5ad_candidates = [
         f"big_{i}.h5ad",
         f"big{i}.h5ad",
@@ -184,7 +245,7 @@ def load_big_slice(data_root: str, slice_idx: int) -> AnnData:
 
     npy_path = _first_existing("", _npy_candidates(data_root, i))
     if npy_path:
-        return _load_npy_bundle(npy_path, data_root)
+        return _load_npy_bundle(npy_path, data_root, slice_idx=i, panel_csv=panel_path)
 
     globs = sorted(
         glob.glob(os.path.join(data_root, f"**/*Big{i}*.h5ad"), recursive=True)
@@ -199,7 +260,7 @@ def load_big_slice(data_root: str, slice_idx: int) -> AnnData:
     )
 
 
-def load_big_slice_from_path(path: str) -> AnnData:
+def load_big_slice_from_path(path: str, panel_csv: Optional[str] = None) -> AnnData:
     data_root = os.path.dirname(path)
     if path.endswith(".h5ad"):
         adata = sc.read_h5ad(path)
@@ -209,7 +270,7 @@ def load_big_slice_from_path(path: str) -> AnnData:
             adata.obsm["spatial"] = adata.obs[["x_centroid", "y_centroid"]].values
         return adata
     if path.endswith(".npy"):
-        return _load_npy_bundle(path, data_root)
+        return _load_npy_bundle(path, data_root, panel_csv=panel_csv)
     raise ValueError(f"Unsupported big slice file: {path}")
 
 

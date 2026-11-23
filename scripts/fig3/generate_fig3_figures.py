@@ -6,6 +6,7 @@ import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import numpy as np
 import pandas as pd
@@ -24,10 +25,8 @@ def fig3_out(slug):
 
 
 def save(fig, name):
-    path = os.path.join(OUT_DIR, name)
-    fig.savefig(path, dpi=300, bbox_inches='tight')
-    print('Saved', path)
-    plt.close(fig)
+    from figure_io import save_figure
+    save_figure(fig, OUT_DIR, name)
 
 
 def plot_branch_decomposition():
@@ -47,7 +46,7 @@ def plot_branch_decomposition():
     ax.set_ylabel('PCC')
     ax.set_title('Branch decomposition: H&E vs panel-to-panel vs fusion')
     ax.legend()
-    save(fig, '01_branch_decomposition.png')
+    save(fig, '01_branch_decomposition.svg')
 
 
 def plot_mnn_sweep():
@@ -64,7 +63,7 @@ def plot_mnn_sweep():
         ax.grid(axis='y', linestyle='--', alpha=0.5)
         for i, v in enumerate(df[col]):
             ax.text(i, v + 0.003, f'{v:.3f}', ha='center', va='bottom', fontsize=8)
-    save(fig, '02_mnn_sweep.png')
+    save(fig, '02_mnn_sweep.svg')
 
 
 def plot_per_gene_scatter():
@@ -83,7 +82,7 @@ def plot_per_gene_scatter():
         ax.set_title(f'{sl}: per-gene PCC (n={len(d)})')
         improved = (d['mnn_learned_pcc'] > d['raw_learned_pcc']).sum()
         ax.text(0.05, 0.95, f'improved: {improved}/{len(d)}', transform=ax.transAxes, va='top')
-    save(fig, '03_per_gene_scatter.png')
+    save(fig, '03_per_gene_scatter.svg')
 
 
 def plot_mnn_gain_volcano():
@@ -100,7 +99,7 @@ def plot_mnn_gain_volcano():
         ax.set_title(f'{sl}: per-gene MNN gain')
         ax.set_yticks([])
         ax.axvline(0, color='black', linewidth=0.5)
-    save(fig, '04_mnn_gain_distribution.png')
+    save(fig, '04_mnn_gain_distribution.svg')
 
 
 def plot_latent_alignment():
@@ -119,7 +118,7 @@ def plot_latent_alignment():
     ax.set_ylabel('Learned MLP PCC')
     ax.set_title('Shared latent alignment + MNN')
     ax.legend()
-    save(fig, '05_latent_alignment.png')
+    save(fig, '05_latent_alignment.svg')
 
 
 def plot_pipeline_mnn():
@@ -151,7 +150,7 @@ def plot_pipeline_mnn():
         ax.annotate('', xy=end, xytext=start, arrowprops=dict(arrowstyle='->', color='gray', lw=1.5))
 
     ax.set_title('MNN-filtered pseudo-label pipeline (Slice1 → Slice2)', fontsize=12)
-    save(fig, '06_mnn_pipeline.png')
+    save(fig, '06_mnn_pipeline.svg')
 
 
 def plot_cycle_trap_schematic():
@@ -175,7 +174,7 @@ def plot_cycle_trap_schematic():
     ax.text(6.75, 2.5, 'F_{A←B}', ha='center', fontsize=10)
     ax.text(5, 0.8, 'Cycle loss can be low while Ŷ_B ≠ true Y_B', ha='center', fontsize=10, style='italic')
     ax.set_title('Cycle self-consistency trap', fontsize=12)
-    save(fig, '07_cycle_trap.png')
+    save(fig, '07_cycle_trap.svg')
 
 
 def plot_signal_contribution():
@@ -189,17 +188,23 @@ def plot_signal_contribution():
     ax.set_title('Signal source: H&E vs panel-to-panel')
     for bar, val in zip(bars, slice2):
         ax.text(val + 0.005, bar.get_y() + bar.get_height()/2, f'{val:.3f}', va='center')
-    save(fig, '08_signal_contribution.png')
+    save(fig, '08_signal_contribution.svg')
 
 
 def plot_top_marker_gains():
+    csv_path = os.path.join(PROJECT_ROOT, "experiments", "fig3", "top_marker_gains_hgnn_vs_mnn.csv")
+    if os.path.exists(csv_path):
+        from generate_top_marker_gains_chart import plot_top_marker_gains as _plot
+        _plot(top_n=10, out_path=os.path.join(OUT_DIR, "09_top_marker_gains.svg"))
+        return
+
     df = pd.read_csv(os.path.join(fig3_out('per_gene_pcc'), 'per_gene_pcc.csv'))
     d = df[df['slice'] == 'Slice2'].nlargest(10, 'mnn_gain')
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.barh(d['gene'][::-1], d['mnn_gain'][::-1], color='#59a14f')
     ax.set_xlabel('MNN gain (ΔPCC)')
     ax.set_title('Top 10 Slice2 marker genes improved by MNN')
-    save(fig, '09_top_marker_gains.png')
+    save(fig, '09_top_marker_gains.svg')
 
 
 def plot_pcc_distribution():
@@ -213,7 +218,7 @@ def plot_pcc_distribution():
         ax.set_ylabel('Count')
         ax.set_title(f'{sl}: per-gene PCC distribution')
         ax.legend()
-    save(fig, '10_pcc_distribution.png')
+    save(fig, '10_pcc_distribution.svg')
 
 
 def main():

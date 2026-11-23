@@ -66,12 +66,18 @@ def eval_panel(gt, pred, graph, label):
     }
 
 
-def maybe_eval_gt(gt_path, obs_names, genes, pred, spatial, num_neighbors, label):
-    if gt_path is None or not os.path.isfile(gt_path):
+def maybe_eval_gt(gt_source, obs_names, genes, pred, spatial, num_neighbors, label):
+    if gt_source is None:
         return None
     import scanpy as sc
-    gt_adata = sc.read_h5ad(gt_path)
-    gt_adata = gt_adata[obs_names, genes].copy()
+    from anndata import AnnData
+    if isinstance(gt_source, AnnData):
+        gt_adata = gt_source[obs_names, genes].copy()
+    elif os.path.isfile(gt_source):
+        gt_adata = sc.read_h5ad(gt_source)
+        gt_adata = gt_adata[obs_names, genes].copy()
+    else:
+        return None
     gt_x = gt_adata.X.toarray() if hasattr(gt_adata.X, "toarray") else np.asarray(gt_adata.X)
     graph = se.pp.Build_graph(
         spatial, graph_type="knn", weighted="gaussian",
@@ -94,8 +100,8 @@ def main():
     log(f"Panel split: A={len(panel_a)} genes, B={len(panel_b)} genes")
 
     log("Loading big slices ...")
-    adata1_full = load_big_slice(args.data_root, 1)
-    adata2_full = load_big_slice(args.data_root, 2)
+    adata1_full = load_big_slice(args.data_root, 1, panel_csv=args.panel_csv)
+    adata2_full = load_big_slice(args.data_root, 2, panel_csv=args.panel_csv)
     log(f"Loaded big1: {adata1_full.n_obs} cells x {adata1_full.n_vars} vars")
     log(f"Loaded big2: {adata2_full.n_obs} cells x {adata2_full.n_vars} vars")
 
@@ -106,8 +112,8 @@ def main():
         pred_b1 = np.load(os.path.join(args.out_dir, "pred_panelB_slice1.npy"))
         pred_a2 = np.load(os.path.join(args.out_dir, "pred_panelA_slice2.npy"))
         rows = []
-        gt1 = args.gt_big1 or default_gt_h5ad(args.data_root, 1)
-        gt2 = args.gt_big2 or default_gt_h5ad(args.data_root, 2)
+        gt1 = args.gt_big1 or default_gt_h5ad(args.data_root, 1) or adata1_full
+        gt2 = args.gt_big2 or default_gt_h5ad(args.data_root, 2) or adata2_full
         m1 = maybe_eval_gt(
             gt1, adata1.obs_names, panel_b, pred_b1,
             adata1.obsm["spatial"], args.num_neighbors, "Slice1 panelB")
@@ -175,8 +181,8 @@ def main():
     np.save(os.path.join(args.out_dir, "pred_panelA_slice2.npy"), pred_a2)
 
     rows = []
-    gt1 = args.gt_big1 or default_gt_h5ad(args.data_root, 1)
-    gt2 = args.gt_big2 or default_gt_h5ad(args.data_root, 2)
+    gt1 = args.gt_big1 or default_gt_h5ad(args.data_root, 1) or adata1_full
+    gt2 = args.gt_big2 or default_gt_h5ad(args.data_root, 2) or adata2_full
     m1 = maybe_eval_gt(
         gt1, adata1.obs_names, panel_b, pred_b1,
         adata1.obsm["spatial"], args.num_neighbors, "Slice1 panelB")
